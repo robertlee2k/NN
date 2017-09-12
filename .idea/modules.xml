@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/NN.iml" filepath="$PROJECT_DIR$/.idea/NN.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/stockNN_TFlearn.iml" filepath="$PROJECT_DIR$/.idea/stockNN_TFlearn.iml" />
     </modules>
   </component>
 </project>
