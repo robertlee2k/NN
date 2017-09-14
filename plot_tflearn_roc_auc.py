@@ -47,7 +47,7 @@ from sklearn.model_selection import train_test_split
 #  plot the ROC curve graph if drawplot=True
 # otherwise, compute and return ROC_AUC value from y_test( contains label) and y_probas_( contains probability of 2 classes)
 ###############################################################################
-def plot_tflearn_ROC(y_test,y_probas_,title,fig,nrow, ncol, plot_number,annotate=False,drawplot=False):
+def plot_tflearn_ROC(y_test,y_probas_,title,fig,nrow, ncol, plot_number,anytext=None,annotate=False,drawplot=False):
     ''' plot ROC curve and compute AUC
     plot the ROC curve in a one plot with dimension of nrow*ncol at  position plot_number only if drawplot=True'''
     tprs = []
@@ -101,6 +101,8 @@ def plot_tflearn_ROC(y_test,y_probas_,title,fig,nrow, ncol, plot_number,annotate
     axn.set_ylabel('True Positive Rate')
     axn.set_title('ROC of ' +  title )
     axn.legend(loc="lower right")
+    if anytext!=None:
+        axn.text(0.6,0.4,anytext)   #print text on the graph, designed to log confusion matrix
     return roc_auc
 
 #end of plotROC
