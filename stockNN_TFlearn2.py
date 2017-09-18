@@ -16,7 +16,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-
+from sklearn.decomposition import PCA           #try pca
 from sklearn.preprocessing import MinMaxScaler  #try sklearn normalizer by libo
 from sklearn.preprocessing import StandardScaler  #try sklearn normalizer by libo
 
@@ -43,7 +43,7 @@ trainfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2013-2
 testfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2016-2017.csv"  # test data  file
 #"/home/topleaf/stock/tensorFlowData/short.csv"
 
-modelfilename = 'stockNNmodel.pkl'  # trained model dump to disk
+modelfilename = '201315pca150TrainModel'  # trained model dump to disk
 loaddt = False  # whether or not the trained modelfilename is loaded
 logfilename = "/tmp/stockNN2.log"
 
@@ -156,8 +156,8 @@ def load_partcsv_without_header(filename,
                     del row[j]
                 data.append(row)
                 hitCount+=1
-            else:
-                print ('attention:  this row[%d] dataDate %s is not between [%s,%s],so discard this row' %(i, row[DataDateColumn],fromDate,toDate))
+            #else:
+                #print ('attention:  this row[%d] dataDate %s is not between [%s,%s],so discard this row' %(i, row[DataDateColumn],fromDate,toDate))
 
     log ('\ntotal row# read from this data file %s is (%d out of %d)' %(filename,hitCount,i))
     if missingvaluecount != 0:
@@ -172,11 +172,14 @@ def load_partcsv_without_header(filename,
 # visualize  the batch features in both a scatter subplot to review the min-max range of the features in a whole picture
 # and a subplot of histogram for each features' distribution
 
-def plotFeatures(batch,datasetFeatureNames,desc=None,savePlotToDisk=True):
+def plotFeatures(batch,datasetFeatureNames,desc=None,savePlotToDisk=True,scatterAdjust=False):
     """
 batch: is 2-D matrix [n_sample,n_feature]
 datasetFeatureNames: a list that contains all the feature names in the same order as batch
 desc is the string that describes the data,such as "2013-15training" ,will be used as part of plot title.
+savePlotTodisk : whether or not save the plots to disk
+scatterAdjust : whether scale Y scale to fit for current min/max , set it to False if you want to compare all features'
+absolute min/max value in one scatter plot
     """
     xscatter=[]   # hold the x axis coordinates, which is column id#
     yscatter=[]   # hold a tuple with (minvalue,maxvalue) for that x
@@ -240,8 +243,6 @@ desc is the string that describes the data,such as "2013-15training" ,will be us
         ycoord = zip(*yscatter)
         for i,colors,names,markers in zip([0,1],['red','blue'],['min','max'],['x','o']):
             axs.scatter(xscatter, list(ycoord[i]), label=names, color=colors, s=25, marker=markers)
-            # ymincord=list(ycoord[0])  change the ycoord[0] from a tuple to a  list holding all min values
-            # ymaxcord= list(ycoord[1])  change the ycoord[1] from a tuple to a list holding all max values
 
 
 
@@ -249,16 +250,17 @@ desc is the string that describes the data,such as "2013-15training" ,will be us
         axs.set_ylabel('actual value ')
         axs.set_title("scatter min & max for "+ str(n_feature) +" features in "+ desc + " with " +str(n_sample) +" samples")
 
-        # adjust Y scale to show this column's min and max scatter point in the graph,at the cost of possibly sacrifice other columns
-        if y.max()>0 :
-            ymax=y.max()*1.2
-        else:
-            ymax=y.max()*0.8
-        if y.min()>0 :
-            ymin=y.min()*0.8
-        else:
-            ymin=y.min()*1.2
-        axs.set_ylim(ymin,ymax)
+        if scatterAdjust==True:
+            # adjust Y scale to show this column's min and max scatter point in the graph,at the cost of possibly sacrifice other columns
+            if y.max()>0 :
+                ymax=y.max()*1.2
+            else:
+                ymax=y.max()*0.8
+            if y.min()>0 :
+                ymin=y.min()*0.8
+            else:
+                ymin=y.min()*1.2
+            axs.set_ylim(ymin,ymax)
 
         axs.annotate('Here:id =' + str(j)+' min:%s' %yscatter[j][0], xy=(j, yscatter[j][0]), xycoords='data',
                      xytext=(20, 30), textcoords='offset points',
@@ -329,9 +331,11 @@ def main():
   )
 # plot original data to review
 
-  #plotFeatures(training_set.data,training_set.featurenames,"Orig13-15train500",True)
+  #plotFeatures(training_set.data,training_set.featurenames,"Orig13-15train500",savePlotToDisk=True,scatterAdjust=False)
 
- # added by libo : declare and store this scaler, and use the same one to scale the test data
+
+  # added by libo : declare and store this scaler, and use the same one to scale the test data
+
 
   #dataScaler = MinMaxScaler().fit(training_set.data)
   #log('the data range of features in training set are %s' % dataScaler.data_range_)
@@ -339,17 +343,25 @@ def main():
   X = dataScaler.transform(training_set.data)
   log('the scaler factors got in training set are %s' % dataScaler.scale_)
 
-  plotFeatures(X,training_set.featurenames,"stdscale13-15train500",True)
-  #plotFeatures(X, training_set.featurenames, "minmaxscale13-15train500",True)
+  pca = PCA(n_components=150)
+  pca.fit(X)
+  X = pca.transform(X)
+
+  print ("pca.explained_variance_ratio_ and pca.explained_variance_ are:")
+  print(pca.explained_variance_ratio_)
+  print(pca.explained_variance_)
+
+  #plotFeatures(X,training_set.featurenames,"stdscale13-15train500",savePlotToDisk=True,scatterAdjust=False)
+  #plotFeatures(X, training_set.featurenames, "minmaxscale13-15train500",savePlotToDisk=True,scatterAdjust=False)
   y = training_set.target
     #[training_set.target != 2]
 
 
 
 
-  log ('the first 20 label of the training set are %s' %y[0:21])
+  #log ('the first 20 label of the training set are %s' %y[0:21])
 
-  log('\nloading test data from file %s in progress ... time:%s' % (testfilename, time.ctime()),logfilename)
+  #log('\nloading test data from file %s in progress ... time:%s' % (testfilename, time.ctime()),logfilename)
 
 
   test_set= load_partcsv_without_header(
@@ -364,13 +376,22 @@ def main():
       target_column=5,
       filling_value=1.0
   )
+
+
+
+
+    # plot original test data to review
+  #plotFeatures(test_set.data,test_set.featurenames,"Orig16-17test500",savePlotToDisk=True,scatterAdjust=False)
   # the following 2 sentences only get the class 0,1 DATA,discard data with class=2.
  #added by libo
+    # apply the SAME datascaler extracted from training data to test data, implicitly assuming they have same distribution(mu & sigma)
   X_test = dataScaler.transform(test_set.data)
     #[test_set.target != 2, :]
-  plotFeatures(X_test,test_set.featurenames,"std16-17test500")
+  #plotFeatures(X_test,test_set.featurenames,"std16-17test500",savePlotToDisk=True,scatterAdjust=False)
   #plotFeatures(X_test, test_set.featurenames, "minmaxscale16-17test ",False)
 
+  # try pca
+  X_test = pca.transform(X_test)
 
   y_test = test_set.target
     #[test_set.target != 2]
@@ -387,16 +408,18 @@ def main():
       # dpp= tflearn.data_preprocessing.DataPreprocessing(name="dataPreprocess")
       # dpp.add_custom_preprocessing(myNormalizer) #Mean: 3163.05 (To avoid repetitive computation, add it to argument 'mean' of `add_featurewise_zero_center`)
 
-       net = tflearn.input_data([None, 161], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+       #net = tflearn.input_data([None, 161], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+       #try pca
+       net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
 
-       net = tflearn.fully_connected(net, 80, activation='tanh', weights_init='xavier', bias_init='normal',
-                             regularizer=None, weight_decay=0.001, name='hidderlayer1')
-       net = tflearn.fully_connected(net, 80, activation='tanh', weights_init='xavier', bias_init='normal',
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
+                             regularizer='L2', weight_decay=0.001, name='hidderlayer1')
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
                              regularizer='L2', weight_decay=0.001, name='hidderlayer2')
-       net = tflearn.fully_connected(net, 80, activation='tanh', weights_init='xavier', bias_init='normal',
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
                              regularizer='L2', weight_decay=0.001, name='hidderlayer3')
-       net = tflearn.fully_connected(net, 80, activation='tanh', weights_init='xavier', bias_init='normal',
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
                             regularizer='L2', weight_decay=0.001, name='hidderlayer4')
        # net = tflearn.fully_connected(net, 80,  activation='sigmoid',name='hidderlayer5')
        #
@@ -417,11 +440,11 @@ def main():
                                      name='outputlayer')
 
        #Y = to_categorical(training_set.target, 3)
-
-       admopt = tflearn.Adam(learning_rate=0.001)
-       #momentum= tflearn.Momentum(learning_rate=0.01,lr_decay=0.96,decay_step=100)
+       learningrate=0.0001
+       admopt = tflearn.Adam(learning_rate=learningrate)
+       #momentum= tflearn.Momentum(learning_rate=0.1,lr_decay=0.96,decay_step=100)
        #rmsProp=tflearn.RMSProp(learning_rate=0.1,decay=0.9,momentum=0.1)
-       # sgd = tflearn.SGD(learning_rate=0.01, lr_decay=0.96, decay_step=500)
+       #sgd = tflearn.SGD(learning_rate=learningrate, lr_decay=0.96, decay_step=500)
        acc = tflearn.metrics.Accuracy()
        #topk = tflearn.metrics.Top_k(1)
 
@@ -429,13 +452,63 @@ def main():
        #                         to_one_hot=True, n_classes=2)
        #net = tflearn.regression(net, optimizer=admopt, loss = 'binary_crossentropy', to_one_hot=True, n_classes=2)
 
+       # net = tflearn.regression(net, optimizer=momentum, loss='categorical_crossentropy', metric=acc, \
+       #                          to_one_hot=True, n_classes=2)
        net = tflearn.regression(net, optimizer=admopt, loss='categorical_crossentropy', metric=acc, \
-                                to_one_hot=True, n_classes=2)
+                            to_one_hot=True, n_classes=2)
 
        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_7thlogs/", tensorboard_verbose=0)
 
-       log('\ntraining the DNN classifier for %d epoches with mini_batch size of %d in progress ... time:%s' % (50,1024,time.ctime()))
-       model.fit(X, y, validation_set= (X_test,y_test),show_metric=True, batch_size=1024,n_epoch=50,snapshot_epoch=False)
+       #if you need to load a previous model with all weights,uncomment the following lines to do it
+       key=raw_input("\nDo you want to load previous trained model from disk ? \n 1. Load & predict \n2. skip loading\nPlease input your choice(1/2):")
+       if key=='1':
+         if os.path.exists(modelfilename+".meta"):
+            log('\nLoading previous model from file %s, restoring all weights' %modelfilename)
+            model.load(modelfilename)
+            keyp = raw_input("\nPlease input a row# in test file to predict its label: (q to quit predicting, e to exit )")
+            while (keyp != 'q' and keyp!='e'):
+                rowid=int(keyp)
+                tmp=X_test[rowid:rowid+1,:]
+                #tmp=tmp.reshape(tmp.shape[0],1)
+
+                pred= model.predict(tmp)
+                print("predicted probability:%s" %pred)
+
+                print ("predicted y label = %s" %(np.argmax(pred, axis=1)))
+                print ("true y_label = %s" %(y_test[rowid:rowid+1]))
+
+                keyp = raw_input("\nPlease input a row# in test file to predict: (q to quit predicting, e to exit )")
+            if keyp=='q':
+                log("\nload savedModel, continue to train")
+            elif keyp=='e':
+                return -1  # exit predicting & training.
+
+         else:
+            log("\n the modelfile %s doesn't exist in current folder,so skip it" %modelfilename)
+       else:
+           log("\n Skip loading previous trained modelfile %s" %modelfilename)
+
+       # preview outputlayer and hiddenlayer4's weight
+       #outlayer_var= tflearn.get_layer_variables_by_name("outputlayer")
+       #log ("\noutput layer weight:")
+       #log(outlayer_var[0])
+       #log ("\noutputlayer bias:")
+       #log (outlayer_var[1])
+
+       #h4layer_var= tflearn.get_layer_variables_by_name("hidderlayer4")
+       #log("\nhiddenlayer 4 weight:")
+       #log(h4layer_var[0])
+
+       #model.get_weights(net.W)
+       log('\ntraining the DNN classifier adamOpt (alpha=%0.6f) for %d epoches with mini_batch size of %d in progress ... time:%s' \
+           % (learningrate,600,4096,time.ctime()))
+       model.fit(X, y, validation_set= (X_test,y_test),shuffle=False,show_metric=True, batch_size=4096,n_epoch=600,snapshot_epoch=False)
+
+      # save the model to disk
+
+       log('\ntraining completed, save the model to disk as %s' % modelfilename)
+       model.save(modelfilename)
+
 
 
 
@@ -444,18 +517,18 @@ def main():
         log('\nevaluate the DNN classifier using %s in progress... time:%s' % (title,(time.ctime())))
         # print('\n%s inputX[0:20] is' %title)
         # print(X_predict[0:20])
-        print('\n%s y_true[0:20] is' %title)
-        print(y_true[0:20])
+        #print('\n%s y_true[0:20] is' %title)
+        #print(y_true[0:20])
         predicted = model.predict(X_predict)
 
 
 
         # get the index of the largest possibility value of predicted list as the label of prediction
         verdictVector = np.argmax(predicted, axis=1)
-        print('\n%s verdictVector[0:20] is' %title)
-        print(verdictVector[0:20])
-        print('\n%s raw probability of predicted[0:20,:] are ' %title)
-        print(predicted[0:20, :])
+        #print('\n%s verdictVector[0:20] is' %title)
+        #print(verdictVector[0:20])
+        #print('\n%s raw probability of predicted[0:20,:] are ' %title)
+        #print(predicted[0:20, :])
         # log('\n%s             y_true counts:' % title)
         # log(y_true.value_counts())
 
@@ -470,7 +543,7 @@ def main():
         from sklearn import metrics
         expected = y_true
         log(metrics.classification_report(expected, verdictVector, labels=[0, 1],
-                                          target_names=['not buy', 'buy']))
+                                          target_names=["predict=0", 'predict=1']))
         #print out confusion matrix
         cmstr=printConfusionMatrix(metrics.confusion_matrix(expected, verdictVector))
         log(cmstr)
@@ -481,14 +554,16 @@ def main():
         # probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
         plot_tflearn_ROC(y_true, predicted, title, fig, nrow, ncol, plot_number, cmstr, annotate, drawplot)
 
-  figid = plt.figure("total ROC 201315stdscaleTrain_201606Test500",figsize=(10,8))
+
+
+  figid = plt.figure("total ROC 201315stdscale_pca150Train_201606Test",figsize=(10,8))
   figid.subplots_adjust(top=0.95, left=0.12, right=0.90,hspace=0.43, wspace=0.2)
 
   #evaluate the model with Training data
-  evalprint(X, y,"Training data after stdscale",figid,2,1,1,False,True)
+  evalprint(X, y,"with Training data after stdscale_PCA150 preprocess",figid,2,1,1,False,True)
 
-    # evaluate the model with Test data
-  evalprint(X_test, y_test, "Test data after stdscale", figid, 2, 1, 2, False, True)
+  # evaluate the model with Test data
+  evalprint(X_test, y_test, "with Test data after stdscale_PCA150 preprocess", figid, 2, 1, 2, False, True)
 
   endTime = time.time()  # end time in ms.
   elapseTime = (endTime - startTime)
@@ -496,14 +571,29 @@ def main():
   minute = int((elapseTime % 3600) / 60)
   second = int((elapseTime % 3600) % 60)
   log("\nthe WHOLE ELAPSED time of loading data and training the model is %d hours:%d miniutes:%d seconds"
-            % (hour, minute, second))
+                % (hour, minute, second))
 
-  plt.savefig("total ROC 201315stdscaleTrain_201606Test500.png", figsize=(10, 8))
+
+
+  plt.savefig("total ROC 201315std_pca150Train_201606Test_alpha0dot0001_epoch600_4096.png", figsize=(10, 8))
   plt.show()  # display the ROC plot onscreen, if plot ROC is not needed, you must comment this line out!!!
   plt.close(figid)  #close it to release memory
 
 
-        #save the trained model to a file
+  # keyp = raw_input("\nPlease input a row# to predict: (-1 to quit)")
+  # while (keyp != '-1'):
+  #     rowid=int(keyp)
+  #     tmp=X_test[rowid,:]
+  #     #tmp=tmp.reshape(tmp.shape[0],1)
+  #     pred= model.predict(tmp)
+  #     print ("predicted y label = %d, true y label is %d" %(np.argmax(pred, axis=1),y_test[rowid,:] ))
+  #
+  #     keyp = raw_input("\nPlease input a row# to predict: (-1 to quit)")
+  # log("End of program")
+
+
+#save the trained model to a file
+
 
   # create_feature_spec_for_parsing  returns  a  dict  mapping  feature  keys  from feature_columns to
   # FixedLenFeature or VarLenFeature  values.
