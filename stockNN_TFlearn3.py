@@ -19,7 +19,6 @@ import tensorflow as tf
 from sklearn.decomposition import PCA           #try pca
 from sklearn.preprocessing import MinMaxScaler  #try sklearn normalizer by libo
 from sklearn.preprocessing import StandardScaler  #try sklearn normalizer by libo
-from sklearn.preprocessing import RobustScaler  #try this with outliers
 
 from tensorflow.python.platform import gfile
 import csv
@@ -44,7 +43,7 @@ trainfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2013-2
 testfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2016-2017.csv"  # test data  file
 #"/home/topleaf/stock/tensorFlowData/short.csv"
 
-modelfilename = '201315minmaxscaleTrainModel'  # trained model dump to disk
+#modelfilename = '201315custMidrangescaleTrainModel'  # trained model dump to disk
 loaddt = False  # whether or not the trained modelfilename is loaded
 logfilename = "/tmp/stockNN2.log"
 
@@ -53,6 +52,11 @@ EXPORT_DIR = "/tmp/serving_savedstockmodel"  #export dir base
 # the following definition specified the column id# in original csv data file,starting from 0
 
 DataDateColumn = 4
+midNormalizedColumnids = [0,1,42,43,44,45,46,47,48,49,68,69,70,71,72,73,74,75,76,77,78,79,80,81,\
+                          82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,138,139,140,141,142,\
+                          148,149,150,151,152,153,154,155,156,157,158,159]
+
+
 
 import datetime
 import matplotlib.pyplot as plt
@@ -62,10 +66,31 @@ from plot_tflearn_roc_auc import plot_tflearn_ROC #for plotting ROC curve
 
 from sklearn.metrics import roc_curve,auc
 
-# def midrangeStandardization(X):
-#     """apply midrange transform to the specified columns of training data X,
-#     return the transformed X and the scaler to be applied with test/validation data
-#     """
+def midrangeStandardization(X,columnids,isTraining,midrange,fullrange2):
+    """apply midrange transform to the specified columns of training data X,
+    return the transformed X and the scaler to be applied with test/validation data
+     midrange=(minX+maxX)/2
+     fullrange=maxX-minX
+     scaled = (x-midrange)/(fullrange/2)
+
+     scaled the X data into [-1,1] range
+    """
+    if isTraining:  # need to compute the scaler for all desired columnid and apply transformation to X
+        for col in columnids:
+            cmax= np.max(X[:,col],axis=0)
+            cmin= np.min(X[:,col],axis=0)
+            midrange[col] =(cmax+cmin)/2
+            fullrange2[col]=(cmax-cmin)/2
+            X[:,col] = (X[:,col]-midrange[col])/fullrange2[col]
+        return X
+    # elif (midrange==None or fullrange2==None):
+    #     log("\n fatal error: midrange and fullrange2 MUST not be None, use the ones from trainingSet!!")
+    #     return -1
+    else:           #apply transform
+        for col in columnids:
+            X[:, col] = (X[:, col] - midrange[col]) / fullrange2[col]
+        return X
+
 
 #get roc_auc for predicted data with label =1
 def get_roc_auc(y_true,y_pred_prob):
@@ -342,14 +367,21 @@ def main():
 
 
   # added by libo : declare and store this scaler, and use the same one to scale the test data
-
-
-  dataScaler = MinMaxScaler().fit(training_set.data)
+  preScaler=StandardScaler()
+  #preScaler=MinMaxScaler()
+  preScalerClassName = preScaler.__class__.__name__  # get classname as part of the title in ROC plot for readability
+  dataScaler = preScaler.fit(training_set.data)
   #log('the data range of features in training set are %s' % dataScaler.data_range_)
-  #dataScaler = RobustScaler().fit(training_set.data)
-  #dataScaler =  StandardScaler().fit(training_set.data)
+
   X = dataScaler.transform(training_set.data)
   log('the scaler factors got in training set are %s' % dataScaler.scale_)
+
+  #customized midrangestandard  normolize those specified columns only
+  #midr=np.zeros(training_set.data.shape[1])
+  #fullr=np.zeros(training_set.data.shape[1])
+  #X = midrangeStandardization(training_set.data, midNormalizedColumnids, isTraining=True, midrange=midr, fullrange2=fullr)
+
+
 
   # pca = PCA(n_components=150)
   # pca.fit(X)
@@ -359,7 +391,7 @@ def main():
   # print(pca.explained_variance_ratio_)
   # print(pca.explained_variance_)
 
-  #plotFeatures(X,training_set.featurenames,"stdscale13-15train500",savePlotToDisk=True,scatterAdjust=False)
+  #plotFeatures(X,training_set.featurenames,"custmidrange13-15train500",savePlotToDisk=True,scatterAdjust=False)
   #plotFeatures(X, training_set.featurenames, "minmaxscale13-15train500",savePlotToDisk=True,scatterAdjust=False)
   y = training_set.target
     #[training_set.target != 2]
@@ -395,9 +427,13 @@ def main():
     # apply the SAME datascaler extracted from training data to test data, implicitly assuming they have same distribution(mu & sigma)
   X_test = dataScaler.transform(test_set.data)
     #[test_set.target != 2, :]
-  #plotFeatures(X_test,test_set.featurenames,"std16-17test500",savePlotToDisk=True,scatterAdjust=False)
+
   #plotFeatures(X_test, test_set.featurenames, "minmaxscale16-17test ",False)
 
+  # apply midrange normalization to test data using the same midr and fullr got from training dataset
+  #X_test = midrangeStandardization(test_set.data, midNormalizedColumnids, isTraining=False, midrange=midr,fullrange2=fullr)
+
+  #plotFeatures(X_test,test_set.featurenames,"cust_midrange16-17test500",savePlotToDisk=True,scatterAdjust=False)
   # try pca
   # X_test = pca.transform(X_test)
 
@@ -415,20 +451,31 @@ def main():
   with tf.Graph().as_default():
       # dpp= tflearn.data_preprocessing.DataPreprocessing(name="dataPreprocess")
       # dpp.add_custom_preprocessing(myNormalizer) #Mean: 3163.05 (To avoid repetitive computation, add it to argument 'mean' of `add_featurewise_zero_center`)
+       epoch = 300
+       learningrate = 0.1
+       minibatch = 16384 #8192
+       rs= 2 #25799 #39987 # # 186
+       rng =np.random.RandomState(rs)
+       seedweight=rng.uniform(0.001,1)
+       log('seedweight=%0.4f' %seedweight)
+       seedbias=rng.uniform(0.01,0.09)
+       log('seedbias=%0.4f' %seedbias)
+       xavierInit=tflearn.initializations.xavier(uniform=True,seed=seedweight)
+       normalInit=tflearn.initializations.normal(seed=seedbias)
 
        net = tflearn.input_data([None, 161], data_preprocessing=None, data_augmentation=None, name="inputlayer")
        #try pca
        # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
 
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
-                             regularizer='L2', weight_decay=0.001, name='hidderlayer1')
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
-                             regularizer='L2', weight_decay=0.001, name='hidderlayer2')
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
-                             regularizer='L2', weight_decay=0.001, name='hidderlayer3')
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
-                            regularizer='L2', weight_decay=0.001, name='hidderlayer4')
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                             regularizer='L2', weight_decay=0.01, name='hidderlayer1')
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                             regularizer='L2', weight_decay=0.01, name='hidderlayer2')
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                             regularizer='L2', weight_decay=0.01, name='hidderlayer3')
+       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                            regularizer='L2', weight_decay=0.01, name='hidderlayer4')
        # net = tflearn.fully_connected(net, 80,  activation='sigmoid',name='hidderlayer5')
        #
        # net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
@@ -444,13 +491,13 @@ def main():
        #  net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
        #                                regularizer='L2', weight_decay=0.001, name='hidderlayer10')
 
-       net = tflearn.fully_connected(net, 2, activation='softmax',
+       net = tflearn.fully_connected(net, 2, activation='softmax',weights_init=xavierInit, bias_init=normalInit,
                                      name='outputlayer')
 
        #Y = to_categorical(training_set.target, 3)
-       learningrate=0.001
-       admopt = tflearn.Adam(learning_rate=learningrate)
-       #momentum= tflearn.Momentum(learning_rate=0.1,lr_decay=0.96,decay_step=100)
+
+       #opt = tflearn.Adam(learning_rate=learningrate)
+       opt = tflearn.Momentum(learning_rate=learningrate,lr_decay=0.96,decay_step=100)
        #rmsProp=tflearn.RMSProp(learning_rate=0.1,decay=0.9,momentum=0.1)
        #sgd = tflearn.SGD(learning_rate=learningrate, lr_decay=0.96, decay_step=500)
        acc = tflearn.metrics.Accuracy()
@@ -458,43 +505,43 @@ def main():
 
        #net = tflearn.regression(net, optimizer=admopt, loss = 'roc_auc_score', metric=acc, \
        #                         to_one_hot=True, n_classes=2)
-       #net = tflearn.regression(net, optimizer=admopt, loss = 'binary_crossentropy', to_one_hot=True, n_classes=2)
+       #net = tflearn.regression(net, optimizer=opt, loss = 'binary_crossentropy', to_one_hot=True, n_classes=2)
 
-       # net = tflearn.regression(net, optimizer=momentum, loss='categorical_crossentropy', metric=acc, \
+       #net = tflearn.regression(net, optimizer=momentum, loss='categorical_crossentropy', metric=acc, \
        #                          to_one_hot=True, n_classes=2)
-       net = tflearn.regression(net, optimizer=admopt, loss='categorical_crossentropy', metric=acc, \
+       net = tflearn.regression(net, optimizer=opt, loss='categorical_crossentropy', metric=acc, \
                             to_one_hot=True, n_classes=2)
 
-       model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_7thlogs/", tensorboard_verbose=0)
-
+       model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_9thlogs/", tensorboard_verbose=0)
+       modelfilename="201315%s_%s_alpha%0.4f_epoch%d_batch%d_TrainedModel" %(preScalerClassName,opt.name,learningrate,epoch,minibatch)
        #if you need to load a previous model with all weights,uncomment the following lines to do it
-       key=raw_input("\nDo you want to load previous trained model from disk ? \n 1. Load & predict \n2. skip loading\nPlease input your choice(1/2):")
-       if key=='1':
-         if os.path.exists(modelfilename+".meta"):
-            log('\nLoading previous model from file %s, restoring all weights' %modelfilename)
-            model.load(modelfilename)
-            keyp = raw_input("\nPlease input a row# in test file to predict its label: (q to quit predicting, e to exit )")
-            while (keyp != 'q' and keyp!='e'):
-                rowid=int(keyp)
-                tmp=X_test[rowid:rowid+1,:]
-                #tmp=tmp.reshape(tmp.shape[0],1)
-
-                pred= model.predict(tmp)
-                print("predicted probability:%s" %pred)
-
-                print ("predicted y label = %s" %(np.argmax(pred, axis=1)))
-                print ("true y_label = %s" %(y_test[rowid:rowid+1]))
-
-                keyp = raw_input("\nPlease input a row# in test file to predict: (q to quit predicting, e to exit )")
-            if keyp=='q':
-                log("\nload savedModel, continue to train")
-            elif keyp=='e':
-                return -1  # exit predicting & training.
-
-         else:
-            log("\n the modelfile %s doesn't exist in current folder,so skip it" %modelfilename)
-       else:
-           log("\n Skip loading previous trained modelfile %s" %modelfilename)
+       # key=raw_input("\nDo you want to load previous trained model from disk ? \n 1. Load & predict \n2. skip loading\nPlease input your choice(1/2):")
+       # if key=='1':
+       #   if os.path.exists(modelfilename+".meta"):
+       #      log('\nLoading previous model from file %s, restoring all weights' %modelfilename)
+       #      model.load(modelfilename)
+       #      keyp = raw_input("\nPlease input a row# in test file to predict its label: (q to quit predicting, e to exit )")
+       #      while (keyp != 'q' and keyp!='e'):
+       #          rowid=int(keyp)
+       #          tmp=X_test[rowid:rowid+1,:]
+       #          #tmp=tmp.reshape(tmp.shape[0],1)
+       #
+       #          pred= model.predict(tmp)
+       #          print("predicted probability:%s" %pred)
+       #
+       #          print ("predicted y label = %s" %(np.argmax(pred, axis=1)))
+       #          print ("true y_label = %s" %(y_test[rowid:rowid+1]))
+       #
+       #          keyp = raw_input("\nPlease input a row# in test file to predict: (q to quit predicting, e to exit )")
+       #      if keyp=='q':
+       #          log("\nload savedModel %s, continue to train" %modelfilename)
+       #      elif keyp=='e':
+       #          return -1  # exit predicting & training.
+       #
+       #   else:
+       #      log("\n the modelfile %s doesn't exist in current folder,so skip it" %modelfilename)
+       # else:
+       #     log("\n Skip loading previous trained modelfile %s" %modelfilename)
 
        # preview outputlayer and hiddenlayer4's weight
        #outlayer_var= tflearn.get_layer_variables_by_name("outputlayer")
@@ -508,9 +555,10 @@ def main():
        #log(h4layer_var[0])
 
        #model.get_weights(net.W)
-       log('\ntraining the DNN classifier adamOpt (alpha=%0.6f) for %d epoches with mini_batch size of %d in progress ... time:%s' \
-           % (learningrate,4500,4096,time.ctime()))
-       model.fit(X, y, validation_set= (X_test,y_test),shuffle=False,show_metric=True, batch_size=4096,n_epoch=4500,snapshot_epoch=False)
+       log('\ntraining the DNN classifier %s (rs=%d,alpha=%0.6f) for %d epoches with mini_batch size of \
+            %d in progress ... time:%s' \
+           % (opt.name,rs,learningrate,epoch,minibatch,time.ctime()))
+       model.fit(X, y, validation_set= (X_test,y_test),shuffle=True,show_metric=True, batch_size=minibatch,n_epoch=epoch,snapshot_epoch=False,snapshot_step=10000)
 
       # save the model to disk
 
@@ -537,8 +585,7 @@ def main():
         #print(verdictVector[0:20])
         #print('\n%s raw probability of predicted[0:20,:] are ' %title)
         #print(predicted[0:20, :])
-        # log('\n%s             y_true counts:' % title)
-        # log(y_true.value_counts())
+        # log('\n%s             y_true counts:' % title)        # log(y_true.value_counts())
 
         log('\n using %s, The AUC value =%f ' %(title, get_roc_auc(y_true, predicted)))
         log('\n               Null Accuracy= {}%' .format(100*max(y_true.mean(),(1-y_true.mean()))))
@@ -564,14 +611,14 @@ def main():
 
 
 
-  figid = plt.figure("total ROC 201315minMaxscaleTrain_201606Test",figsize=(10,8))
+  figid = plt.figure("total ROC 201315%sTrain_201606Test" %preScalerClassName,figsize=(10,8))
   figid.subplots_adjust(top=0.95, left=0.12, right=0.90,hspace=0.43, wspace=0.2)
 
   #evaluate the model with Training data
-  evalprint(X, y,"with Training data after minmaxScale4500epoch preprocess",figid,2,1,1,False,True)
+  evalprint(X, y,"with Training data after %s %depoch preprocess" %(preScalerClassName,epoch),figid,2,1,1,False,True)
 
   # evaluate the model with Test data
-  evalprint(X_test, y_test, "with Test data after minmaxScale4500epoch preprocess", figid, 2, 1, 2, False, True)
+  evalprint(X_test, y_test, "with Test data after %s %depoch preprocess" %(preScalerClassName,epoch), figid, 2, 1, 2, False, True)
 
   endTime = time.time()  # end time in ms.
   elapseTime = (endTime - startTime)
@@ -583,7 +630,7 @@ def main():
 
 
 
-  plt.savefig("total ROC 201315minmaxScaleTrain_201606Test_alpha0dot001_epoch4500_4096.png", figsize=(10, 8))
+  plt.savefig("ROC 201315%sTrain_201606Test_%s_alpha%0.4f_epoch%d_%d.png" %(preScalerClassName,opt.name,learningrate,epoch,minibatch), figsize=(10, 8))
   plt.show()  # display the ROC plot onscreen, if plot ROC is not needed, you must comment this line out!!!
   plt.close(figid)  #close it to release memory
 
