@@ -3,6 +3,9 @@
 examples that use tflearn high layer API to implement DNN classifier with StockNN network structure pre-verified with irisdata
 
 previous version is stockNN_loadIris_TFLearn.py
+
+updated on 2017-9-22 process data format for data 201101-201612
+
 '''
 
 
@@ -29,9 +32,9 @@ import csv
 
 
 TRAINDATASTART = 1      # the row# of the beginning of training data
-TRAINDATASTOP = 559385  # the row# of the end of the training data record  2013-2015csv file
+TRAINDATASTOP = 3000000  # the row# of the end of the training data record  2013-2015csv file
 TESTDATASTART=1     # the row# of the starting in test csv file 2016-2017
-TESTDATASTOP=352425  # the last row of the whole file, this row# is excluded in test data
+TESTDATASTOP=159273  # the last row of the whole file, this row# is excluded in test data
 
 TrainDataStart = 1
 TrainDataStop = TRAINDATASTOP  #for debugging purpose ,you can adjust this to get a small part for time saving now
@@ -39,23 +42,25 @@ TestDataStart = 1 #350603
 TestDataStop = TESTDATASTOP # TESTDATASTOP     # for debugging purpose ,you can adjust this to get a small part for time saving now
 
 
-trainfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2013-2015.csv"  # training data file
-testfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2016-2017.csv"  # test data  file
-#"/home/topleaf/stock/tensorFlowData/short.csv"
+trainfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201101-201612).csv"   #training data file
+testfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201701-201709).csv"  # test data  file
+
 
 #modelfilename = '201315custMidrangescaleTrainModel'  # trained model dump to disk
-loaddt = False  # whether or not the trained modelfilename is loaded
+
 logfilename = "/tmp/stockNN2.log"
 
-EXPORT_DIR = "/tmp/serving_savedstockmodel"  #export dir base
+EXPORT_DIR = "/tmp/savedstockmodel/"  #export dir base
+
+testResultfile="DNN_Training_results.csv"
 
 # the following definition specified the column id# in original csv data file,starting from 0
 
 DataDateColumn = 4
-midNormalizedColumnids = [0,1,42,43,44,45,46,47,48,49,68,69,70,71,72,73,74,75,76,77,78,79,80,81,\
-                          82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,138,139,140,141,142,\
-                          148,149,150,151,152,153,154,155,156,157,158,159]
 
+midNormalizedColumnids = [0,41,42,43,44,45,46,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,\
+                          82,83,84,85,86,87,88,89,90,91,92,93,94,95,137,138,139,140,141,\
+                          147,148,149,150,151,152,153,154,155,156,157,158,160,161,162,163,164]
 
 
 import datetime
@@ -66,29 +71,56 @@ from plot_tflearn_roc_auc import plot_tflearn_ROC #for plotting ROC curve
 
 from sklearn.metrics import roc_curve,auc
 
-def midrangeStandardization(X,columnids,isTraining,midrange,fullrange2):
-    """apply midrange transform to the specified columns of training data X,
-    return the transformed X and the scaler to be applied with test/validation data
-     midrange=(minX+maxX)/2
-     fullrange=maxX-minX
-     scaled = (x-midrange)/(fullrange/2)
+class TestResult(object):
+    def __init__(self,filename):
+        self.columnsname=["RunId","PreProcessor","AUC(Test)","AUC(Train)","Loss","TestAccuracy",\
+                          "Duration","StartTime","EndTime","Epoch","Minibatch","Optimizer""ROC Curve Location"]
+        self.filename=filename
+        if os.path.exists(filename)==False :
+            with open(filename,'w') as csv_file:
+                writer=csv.writer(csv_file)
+                writer.writerow(self.columnsname)
+    def append(self,rows):
+        if os.path.exists(self.filename):
+            with open(self.filename,'ab+') as csv_file:
+                writer=csv.writer(csv_file)
+                writer.writerow(rows)
 
-     scaled the X data into [-1,1] range
+
+
+
+
+
+
+
+class MidRangeScaler(object):
+    """apply midrange transform to the specified columns of training data X,
+            return the transformed X and the scaler to be applied with test/validation data
+             midrange=(minX+maxX)/2
+             fullrange=maxX-minX
+             scaled = (x-midrange)/(fullrange/2)
+
+             scaled the X data into [-1,1] range
     """
-    if isTraining:  # need to compute the scaler for all desired columnid and apply transformation to X
+    def __init__(self):
+        pass
+
+
+    def fit(self,X,columnids):   # need to compute the scaler for all desired columnid
+        self.midrange = np.zeros(X.shape[1])
+        self.fullrange2 = np.zeros(X.shape[1])
+
         for col in columnids:
-            cmax= np.max(X[:,col],axis=0)
-            cmin= np.min(X[:,col],axis=0)
-            midrange[col] =(cmax+cmin)/2
-            fullrange2[col]=(cmax-cmin)/2
-            X[:,col] = (X[:,col]-midrange[col])/fullrange2[col]
-        return X
-    # elif (midrange==None or fullrange2==None):
-    #     log("\n fatal error: midrange and fullrange2 MUST not be None, use the ones from trainingSet!!")
-    #     return -1
-    else:           #apply transform
+            cmax = np.max(X[:, col], axis=0)
+            cmin = np.min(X[:, col], axis=0)
+            self.midrange[col] = (cmax + cmin) / 2
+            self.fullrange2[col] = (cmax - cmin) / 2
+
+        return self
+
+    def transform(self,X,columnids):
         for col in columnids:
-            X[:, col] = (X[:, col] - midrange[col]) / fullrange2[col]
+            X[:, col] = (X[:, col] - self.midrange[col]) / self.fullrange2[col]
         return X
 
 
@@ -132,7 +164,15 @@ def log(info,logfilename=logfilename):
         logfileid.write(info)
         print ("%s" %info)
 
-
+# def appendRunResult(filename,onerow):
+#     with gfile.Open(filename, "a+") as csvfile:
+#         writer = csv.writer(csvfile)
+#
+#         # columns_name
+#         writer.writerow(["index", "a_name", "b_name"])
+#         # writerows
+#         writer.writerows([[0, 1, 3], [1, 2, 3], [2, 3, 4]])
+#     pass
 
 
 def load_partcsv_without_header(filename,
@@ -165,8 +205,8 @@ def load_partcsv_without_header(filename,
     for i,row in enumerate(data_file):
         # check the content of the row and print out if there's  missing value
         for k in xrange(0, row.__len__()):
-            if row[k] == '':
-                #log("\nblank value in record id:%s,(stockcode = %s) column#=%d" % (row[0], row[2], k+1 ))
+            if row[k] == '?':
+                #log("\n ? value in record id:%s,(stockcode = %s) column#=%d" % (row[0], row[2], k+1 ))
                 row[k]=filling_value  # setting default value to those missing values
                 missingvaluecount+=1
         if i==0: # put the required feature names into a list
@@ -344,7 +384,8 @@ def main():
     # from sklearn.externals import joblib
 
   startTime=time.time();  # start time in ms.
-  log('\nloading training data from file %s in progress ... time:%s' %(trainfilename,time.ctime()) ,logfilename)
+  st=time.ctime()  #start time in date/time format
+  log('\nloading training data from file %s in progress ... time:%s' %(trainfilename,st) ,logfilename)
   #Load datasets. discard column 0,1,3,4 in the original csvfile ,which represent  id ,tradedate,mc_date,datadate
 
   # Load datasets.
@@ -355,9 +396,9 @@ def main():
       features_dtype=np.float32,
       start_rowid=TrainDataStart,
       end_rowid=TrainDataStop,
-      fromDate='2012/12/31',
-      toDate='2015/12/31',
-      discard_colids=[0,1,3,4,-1],  #add -1 in the last column to exclude the percentage infor 2# stockcode,52# market code
+      fromDate='2011/01/01',
+      toDate='2016/12/29',
+      discard_colids=[0,1,2,3,4,-1],  #add -1 in the last column to exclude the percentage infor 2# stockcode,
       target_column=5,
       filling_value=1.0
   )
@@ -369,12 +410,17 @@ def main():
   # added by libo : declare and store this scaler, and use the same one to scale the test data
   preScaler=StandardScaler()
   #preScaler=MinMaxScaler()
+  #preScaler=MidRangeScaler()
   preScalerClassName = preScaler.__class__.__name__  # get classname as part of the title in ROC plot for readability
   dataScaler = preScaler.fit(training_set.data)
-  #log('the data range of features in training set are %s' % dataScaler.data_range_)
+  # log('the data range of features in training set are %s' % dataScaler.data_range_)
+  #dataScaler = preScaler.fit(training_set.data,midNormalizedColumnids)   # my dataScaler needs additional parameters.
+  #X = dataScaler.transform(training_set.data,midNormalizedColumnids)    # my dataScaler needs additional parameters
+  #log('the scaler of my MidRangeScaler are %s' %(dataScaler.midrange,dataScaler.fullrange2))
+
 
   X = dataScaler.transform(training_set.data)
-  log('the scaler factors got in training set are %s' % dataScaler.scale_)
+  #log('the scaler factors got in training set are %s' % dataScaler.scale_)
 
   #customized midrangestandard  normolize those specified columns only
   #midr=np.zeros(training_set.data.shape[1])
@@ -410,9 +456,9 @@ def main():
       features_dtype=np.float32,
       start_rowid=TestDataStart,
       end_rowid=TestDataStop,
-      fromDate='2016/1/1',
-      toDate='2016/6/30',
-      discard_colids=[0,1,3,4,-1],  #add -1 in the last column to exclude the percentage infor  2# stockcode,52# market code
+      fromDate='2016/12/30',
+      toDate='2017/9/19',
+      discard_colids=[0,1,2,3,4,-1],  #add -1 in the last column to exclude the percentage infor  2# stockcode
       target_column=5,
       filling_value=1.0
   )
@@ -426,6 +472,7 @@ def main():
  #added by libo
     # apply the SAME datascaler extracted from training data to test data, implicitly assuming they have same distribution(mu & sigma)
   X_test = dataScaler.transform(test_set.data)
+  #X_test = dataScaler.transform(test_set.data,midNormalizedColumnids)  # my dataScaler needs additional parameters
     #[test_set.target != 2, :]
 
   #plotFeatures(X_test, test_set.featurenames, "minmaxscale16-17test ",False)
@@ -446,14 +493,16 @@ def main():
 
   log('\ndata loading completed, building graph in progress ... time:%s' % (time.ctime()),logfilename)  # train a 3-hidden layer neural network
 
-
+  tf.reset_default_graph()
   # train a 4-hidden layer neural network with 80 nodes (161*80*80*80*80*2= 1318912000 weights, ?? of the training data
   with tf.Graph().as_default():
       # dpp= tflearn.data_preprocessing.DataPreprocessing(name="dataPreprocess")
       # dpp.add_custom_preprocessing(myNormalizer) #Mean: 3163.05 (To avoid repetitive computation, add it to argument 'mean' of `add_featurewise_zero_center`)
-       epoch = 300
-       learningrate = 0.1
+       epoch = 20000
+       learningrate = 0.001
        minibatch = 16384 #8192
+       lrdecay=0.999
+       decaystep=100
        rs= 2 #25799 #39987 # # 186
        rng =np.random.RandomState(rs)
        seedweight=rng.uniform(0.001,1)
@@ -463,19 +512,19 @@ def main():
        xavierInit=tflearn.initializations.xavier(uniform=True,seed=seedweight)
        normalInit=tflearn.initializations.normal(seed=seedbias)
 
-       net = tflearn.input_data([None, 161], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+       net = tflearn.input_data([None, 165], data_preprocessing=None, data_augmentation=None, name="inputlayer")
        #try pca
        # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
 
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                             regularizer='L2', weight_decay=0.01, name='hidderlayer1')
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                             regularizer='L2', weight_decay=0.01, name='hidderlayer2')
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                             regularizer='L2', weight_decay=0.01, name='hidderlayer3')
-       net = tflearn.fully_connected(net, 80, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                            regularizer='L2', weight_decay=0.01, name='hidderlayer4')
+       net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                             regularizer=None, weight_decay=0.001, name='hidderlayer1')
+       net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                             regularizer=None, weight_decay=0.001, name='hidderlayer2')
+       net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                             regularizer=None, weight_decay=0.001, name='hidderlayer3')
+       net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                            regularizer=None, weight_decay=0.001, name='hidderlayer4')
        # net = tflearn.fully_connected(net, 80,  activation='sigmoid',name='hidderlayer5')
        #
        # net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
@@ -496,10 +545,10 @@ def main():
 
        #Y = to_categorical(training_set.target, 3)
 
-       #opt = tflearn.Adam(learning_rate=learningrate)
-       opt = tflearn.Momentum(learning_rate=learningrate,lr_decay=0.96,decay_step=100)
-       #rmsProp=tflearn.RMSProp(learning_rate=0.1,decay=0.9,momentum=0.1)
-       #sgd = tflearn.SGD(learning_rate=learningrate, lr_decay=0.96, decay_step=500)
+       opt = tflearn.Adam(learning_rate=learningrate)
+       #opt = tflearn.Momentum(learning_rate=learningrate,lr_decay=lrdecay,decay_step=decaystep)
+       #opt=tflearn.RMSProp(learning_rate=learningrate,decay=lrdecay,momentum=0.1)
+       #opt = tflearn.SGD(learning_rate=learningrate, lr_decay=lrdecay, decay_step=decaystep)
        acc = tflearn.metrics.Accuracy()
        #topk = tflearn.metrics.Top_k(1)
 
@@ -512,8 +561,8 @@ def main():
        net = tflearn.regression(net, optimizer=opt, loss='categorical_crossentropy', metric=acc, \
                             to_one_hot=True, n_classes=2)
 
-       model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_9thlogs/", tensorboard_verbose=0)
-       modelfilename="201315%s_%s_alpha%0.4f_epoch%d_batch%d_TrainedModel" %(preScalerClassName,opt.name,learningrate,epoch,minibatch)
+       model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_10thlogs/", tensorboard_verbose=0)
+
        #if you need to load a previous model with all weights,uncomment the following lines to do it
        # key=raw_input("\nDo you want to load previous trained model from disk ? \n 1. Load & predict \n2. skip loading\nPlease input your choice(1/2):")
        # if key=='1':
@@ -555,22 +604,36 @@ def main():
        #log(h4layer_var[0])
 
        #model.get_weights(net.W)
-       log('\ntraining the DNN classifier %s (rs=%d,alpha=%0.6f) for %d epoches with mini_batch size of \
-            %d in progress ... time:%s' \
-           % (opt.name,rs,learningrate,epoch,minibatch,time.ctime()))
-       model.fit(X, y, validation_set= (X_test,y_test),shuffle=True,show_metric=True, batch_size=minibatch,n_epoch=epoch,snapshot_epoch=False,snapshot_step=10000)
+       log('\ntraining the DNN classifier using %s (rs=%d,alpha=%0.6f,decayrate=%0.4f,decaystep=%d) for %d epoches with mini_batch \
+           size of %d in progress ... time:%s' \
+           % (opt.name,rs,learningrate,lrdecay,decaystep,epoch,minibatch,time.ctime()))
+       runId=tflearn.utils.id_generator()
+       modelfilename = "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.2f_decaystep%d_epoch%d_batch%d_TrainedModel" \
+                    % (preScalerClassName,runId, opt.name, learningrate, lrdecay, decaystep, epoch, minibatch)
+       model.fit(X, y, validation_set= (X_test,y_test),shuffle=True,show_metric=True,run_id=runId,\
+                 batch_size=minibatch,n_epoch=epoch,snapshot_epoch=False,snapshot_step=10000)
 
       # save the model to disk
+       fullpath=''.join((EXPORT_DIR, runId))
+       if os.path.isfile(fullpath):
+           log("model file %s exists, do not overwrite it!!!!" %fullpath)
+       elif os.path.isdir(fullpath)==False:
+           os.mkdir(fullpath)
+           fullpath=''.join((EXPORT_DIR, runId, '/', modelfilename))
+           log('\ntraining completed, save the model to disk as %s' % fullpath)
+           model.save(fullpath)
+       else:
+           fullpath = ''.join((EXPORT_DIR, runId, '/', modelfilename))
+           log('\ntraining completed, folder exists, overwrite it with new model as %s' % fullpath)
+           model.save(fullpath)
 
-       log('\ntraining completed, save the model to disk as %s' % modelfilename)
-       model.save(modelfilename)
 
 
 
 
 
   def evalprint(X_predict, y_true,title,fig,nrow,ncol,plot_number,annotate=False,drawplot=True):
-        log('\nevaluate the DNN classifier using %s in progress... time:%s' % (title,(time.ctime())))
+        log('\nevaluate the DNN classifier %s in progress... time:%s' % (title,(time.ctime())))
         # print('\n%s inputX[0:20] is' %title)
         # print(X_predict[0:20])
         #print('\n%s y_true[0:20] is' %title)
@@ -587,9 +650,11 @@ def main():
         #print(predicted[0:20, :])
         # log('\n%s             y_true counts:' % title)        # log(y_true.value_counts())
 
-        log('\n using %s, The AUC value =%f ' %(title, get_roc_auc(y_true, predicted)))
+        aucValue=get_roc_auc(y_true, predicted)
+        testAccuracy=np.mean(y_true == verdictVector)
+        log('\n %s, The AUC value =%f ' %(title, aucValue))
         log('\n               Null Accuracy= {}%' .format(100*max(y_true.mean(),(1-y_true.mean()))))
-        log("               Test Accuracy: {}%".format(100 * np.mean(y_true == verdictVector)))
+        log("               Test Accuracy: {}%".format(100 * testAccuracy))
 
 
 
@@ -608,31 +673,56 @@ def main():
         # the following example sklearn predict_proba function is correct or not ??? ...
         # probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
         plot_tflearn_ROC(y_true, predicted, title, fig, nrow, ncol, plot_number, cmstr, annotate, drawplot)
+        return(aucValue,testAccuracy)
 
 
 
-  figid = plt.figure("total ROC 201315%sTrain_201606Test" %preScalerClassName,figsize=(10,8))
+  figid = plt.figure("ROC 2011-16Train201709Test Runid(%s) %s_%s" %(runId,preScalerClassName,opt.name),figsize=(10,8))
   figid.subplots_adjust(top=0.95, left=0.12, right=0.90,hspace=0.43, wspace=0.2)
 
   #evaluate the model with Training data
-  evalprint(X, y,"with Training data after %s %depoch preprocess" %(preScalerClassName,epoch),figid,2,1,1,False,True)
+  trainAuc,trainTa =evalprint(X, y,"with Training data %d epoch,loss=%0.4f " %(epoch,model.trainer.training_state.global_loss),\
+                              figid,2,1,1,False,True)
 
   # evaluate the model with Test data
-  evalprint(X_test, y_test, "with Test data after %s %depoch preprocess" %(preScalerClassName,epoch), figid, 2, 1, 2, False, True)
+  testAuc,testTa= evalprint(X_test, y_test, "with Test data %d minibatch,testAccuracy=%0.4f "
+                            %(minibatch,model.trainer.training_state.best_accuracy), figid, 2, 1, 2, False, True)
 
   endTime = time.time()  # end time in ms.
   elapseTime = (endTime - startTime)
   hour = int(elapseTime / 3600)
   minute = int((elapseTime % 3600) / 60)
   second = int((elapseTime % 3600) % 60)
-  log("\nthe WHOLE ELAPSED time of loading data and training the model is %d hours:%d miniutes:%d seconds"
-                % (hour, minute, second))
+  duration = "%dh%d'%d''" % (hour, minute, second)
+  log("\nthe WHOLE ELAPSED time of loading data and training the model is %s"
+                % (duration))  # update test result  to file
+
+  plotName="%s_ROC2011-16%sTrain_201709Test_%s_alpha%0.4f_epoch%d_%d.png" %(runId,preScalerClassName,opt.name,learningrate,epoch,minibatch)
+  fullpath = ''.join((EXPORT_DIR, runId))
+  if os.path.isfile(fullpath):
+        log("file %s exists, do not overwrite it!!!!" % fullpath)
+  elif os.path.isdir(fullpath) == False:
+        os.mkdir(fullpath)
+  fullpath = ''.join((EXPORT_DIR, runId, '/', plotName))
+  plt.savefig(fullpath, figsize=(10, 8))
 
 
 
-  plt.savefig("ROC 201315%sTrain_201606Test_%s_alpha%0.4f_epoch%d_%d.png" %(preScalerClassName,opt.name,learningrate,epoch,minibatch), figsize=(10, 8))
+
+  # update test result  to file
+  result = [runId, preScalerClassName, "%0.4f"%(trainAuc), "%0.4f"%testAuc, \
+            "%0.4f" %model.trainer.training_state.global_loss,\
+            "%0.4f" %model.trainer.training_state.best_accuracy,
+            duration, "%s"%(st), "%s"%(time.ctime()),str(epoch),str(minibatch),opt.name,fullpath]
+
+  trackRecord = TestResult(testResultfile)
+
+  trackRecord.append(result)
+
+
   plt.show()  # display the ROC plot onscreen, if plot ROC is not needed, you must comment this line out!!!
   plt.close(figid)  #close it to release memory
+
 
 
   # keyp = raw_input("\nPlease input a row# to predict: (-1 to quit)")
@@ -681,4 +771,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

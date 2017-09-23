@@ -99,7 +99,7 @@ def plot_tflearn_ROC(y_test,y_probas_,title,fig,nrow, ncol, plot_number,anytext=
     axn.set_ylim([-0.05, 1.05])
     axn.set_xlabel('False Positive Rate')
     axn.set_ylabel('True Positive Rate')
-    axn.set_title('ROC of ' +  title )
+    axn.set_title('ROC ' +  title )
     axn.legend(loc="lower right")
     if anytext!=None:
         axn.text(0.6,0.4,anytext)   #print text on the graph, designed to log confusion matrix
