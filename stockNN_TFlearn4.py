@@ -72,9 +72,13 @@ from plot_tflearn_roc_auc import plot_tflearn_ROC #for plotting ROC curve
 from sklearn.metrics import roc_curve,auc
 
 class TestResult(object):
+    """use this class to automatically fill model training hyperparamaters and results into a csv file"""
     def __init__(self,filename):
-        self.columnsname=["RunId","PreProcessor","AUC(Test)","AUC(Train)","Loss","TestAccuracy",\
-                          "Duration","StartTime","EndTime","Epoch","Minibatch","Optimizer""ROC Curve Location"]
+        self.columnsname=["RunId","PreProcessor","Optimizer","regularization",
+                          "Alpha","lrdecayrate","decay_step","RS",
+                          "AUC(Train)","Loss(Train)","Accuracy(Train)",
+                          "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",\
+                          "Duration","StartTime","EndTime","Epoch","Minibatch","ROC Curve Location"]
         self.filename=filename
         if os.path.exists(filename)==False :
             with open(filename,'w') as csv_file:
@@ -155,6 +159,65 @@ def printConfusionMatrix(cm):
         output+="\n"
     return output
 
+
+def evalprint(model, X_predict, y_true, title, fig, nrow, ncol, plot_number, annotate=False, drawplot=True):
+    '''
+
+    :param model: model instance to be used to predict
+    :param X_predict:  input dataset X,
+    :param y_true:  ground truth of the dataset's y labels
+    :param title: Any string text to be displayed as the title of the subplot
+    :param fig: main figid
+    :param nrow:
+    :param ncol:
+    :param plot_number: plot #
+    :param annotate:  add annotation on plot, WARNING: it will take FOREVER TO SHOW the plot, be cautious!!
+    :param drawplot: whether or not to plot
+    :return: tuple of (Aucvalue, testAccuracy,NullAccuracy of the dataset)
+    '''
+    log('\nevaluate the DNN classifier %s in progress... time:%s' % (title,(time.ctime())))
+
+    predicted = model.predict(X_predict)
+
+
+
+    # get the index of the largest possibility value of predicted list as the label of prediction
+    verdictVector = np.argmax(predicted, axis=1)
+    #print('\n%s verdictVector[0:20] is' %title)
+    #print(verdictVector[0:20])
+    #print('\n%s raw probability of predicted[0:20,:] are ' %title)
+    #print(predicted[0:20, :])
+    # log('\n%s             y_true counts:' % title)        # log(y_true.value_counts())
+
+    aucValue=get_roc_auc(y_true, predicted)
+    testAccuracy=np.mean(y_true == verdictVector)
+    nullAccuracy=max(y_true.mean(),(1-y_true.mean()))
+    log('\n %s, The AUC value =%f ' %(title, aucValue))
+    log('\n               Null Accuracy= {}%' .format("%0.2f"%(100*nullAccuracy)))
+    log("               Test Accuracy={}%".format("%0.2f"%(100 * testAccuracy)))
+
+
+
+
+    # use sklearn function to print
+    from sklearn import metrics
+    expected = y_true
+    log(metrics.classification_report(expected, verdictVector, labels=[0, 1],
+                                      target_names=["predict=0", 'predict=1']))
+    #print out confusion matrix
+    cmstr=printConfusionMatrix(metrics.confusion_matrix(expected, verdictVector))
+    log(cmstr)
+    log("\n   evaluate model with %s completed, time: %s" % (title,time.ctime()))
+
+    # plot the ROC curve, review the implementation to make sure roc compute algorithm without using
+    # the following example sklearn predict_proba function is correct or not ??? ...
+    # probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
+    plot_tflearn_ROC(y_true, predicted, title, fig, nrow, ncol, plot_number,\
+                     cmstr+'\n'+ 'NullAccuracy= {}%'.format("%0.2f"%(100*nullAccuracy))+\
+                     '\n'+'Accuracy={}%'.format("%0.2f"%(100*testAccuracy)), \
+                     annotate, drawplot)
+    return(aucValue,testAccuracy,nullAccuracy)
+
 import collections
 Dataset = collections.namedtuple('Dataset',['data','target','featurenames'])
 
@@ -164,15 +227,6 @@ def log(info,logfilename=logfilename):
         logfileid.write(info)
         print ("%s" %info)
 
-# def appendRunResult(filename,onerow):
-#     with gfile.Open(filename, "a+") as csvfile:
-#         writer = csv.writer(csvfile)
-#
-#         # columns_name
-#         writer.writerow(["index", "a_name", "b_name"])
-#         # writerows
-#         writer.writerows([[0, 1, 3], [1, 2, 3], [2, 3, 4]])
-#     pass
 
 
 def load_partcsv_without_header(filename,
@@ -408,8 +462,8 @@ def main():
 
 
   # added by libo : declare and store this scaler, and use the same one to scale the test data
-  preScaler=StandardScaler()
-  #preScaler=MinMaxScaler()
+  #preScaler=StandardScaler()
+  preScaler=MinMaxScaler()
   #preScaler=MidRangeScaler()
   preScalerClassName = preScaler.__class__.__name__  # get classname as part of the title in ROC plot for readability
   dataScaler = preScaler.fit(training_set.data)
@@ -498,8 +552,9 @@ def main():
   with tf.Graph().as_default():
       # dpp= tflearn.data_preprocessing.DataPreprocessing(name="dataPreprocess")
       # dpp.add_custom_preprocessing(myNormalizer) #Mean: 3163.05 (To avoid repetitive computation, add it to argument 'mean' of `add_featurewise_zero_center`)
-       epoch = 20000
+       epoch = 170
        learningrate = 0.001
+       regularization="L2"
        minibatch = 16384 #8192
        lrdecay=0.999
        decaystep=100
@@ -518,13 +573,13 @@ def main():
 
 
        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                             regularizer=None, weight_decay=0.001, name='hidderlayer1')
+                             regularizer=regularization, weight_decay=0.001, name='hidderlayer1')
        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                             regularizer=None, weight_decay=0.001, name='hidderlayer2')
+                             regularizer=regularization, weight_decay=0.001, name='hidderlayer2')
        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                             regularizer=None, weight_decay=0.001, name='hidderlayer3')
+                             regularizer=regularization, weight_decay=0.001, name='hidderlayer3')
        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                            regularizer=None, weight_decay=0.001, name='hidderlayer4')
+                            regularizer=regularization, weight_decay=0.001, name='hidderlayer4')
        # net = tflearn.fully_connected(net, 80,  activation='sigmoid',name='hidderlayer5')
        #
        # net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
@@ -604,9 +659,9 @@ def main():
        #log(h4layer_var[0])
 
        #model.get_weights(net.W)
-       log('\ntraining the DNN classifier using %s (rs=%d,alpha=%0.6f,decayrate=%0.4f,decaystep=%d) for %d epoches with mini_batch \
-           size of %d in progress ... time:%s' \
-           % (opt.name,rs,learningrate,lrdecay,decaystep,epoch,minibatch,time.ctime()))
+       log('\nAfter applying %s preprocessor , training the DNN classifier using %s (rs=%d,alpha=%0.6f,decayrate=%0.4f,decaystep=%d) \
+           for %d epoches with mini_batch size of %d in progress ... time:%s' \
+           % (preScalerClassName,opt.name,rs,learningrate,lrdecay,decaystep,epoch,minibatch,time.ctime()))
        runId=tflearn.utils.id_generator()
        modelfilename = "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.2f_decaystep%d_epoch%d_batch%d_TrainedModel" \
                     % (preScalerClassName,runId, opt.name, learningrate, lrdecay, decaystep, epoch, minibatch)
@@ -632,61 +687,22 @@ def main():
 
 
 
-  def evalprint(X_predict, y_true,title,fig,nrow,ncol,plot_number,annotate=False,drawplot=True):
-        log('\nevaluate the DNN classifier %s in progress... time:%s' % (title,(time.ctime())))
-        # print('\n%s inputX[0:20] is' %title)
-        # print(X_predict[0:20])
-        #print('\n%s y_true[0:20] is' %title)
-        #print(y_true[0:20])
-        predicted = model.predict(X_predict)
 
 
 
-        # get the index of the largest possibility value of predicted list as the label of prediction
-        verdictVector = np.argmax(predicted, axis=1)
-        #print('\n%s verdictVector[0:20] is' %title)
-        #print(verdictVector[0:20])
-        #print('\n%s raw probability of predicted[0:20,:] are ' %title)
-        #print(predicted[0:20, :])
-        # log('\n%s             y_true counts:' % title)        # log(y_true.value_counts())
-
-        aucValue=get_roc_auc(y_true, predicted)
-        testAccuracy=np.mean(y_true == verdictVector)
-        log('\n %s, The AUC value =%f ' %(title, aucValue))
-        log('\n               Null Accuracy= {}%' .format(100*max(y_true.mean(),(1-y_true.mean()))))
-        log("               Test Accuracy: {}%".format(100 * testAccuracy))
-
-
-
-
-        # use sklearn function to print
-        from sklearn import metrics
-        expected = y_true
-        log(metrics.classification_report(expected, verdictVector, labels=[0, 1],
-                                          target_names=["predict=0", 'predict=1']))
-        #print out confusion matrix
-        cmstr=printConfusionMatrix(metrics.confusion_matrix(expected, verdictVector))
-        log(cmstr)
-        log("\n   evaluate model with %s completed, time: %s" % (title,time.ctime()))
-
-        # plot the ROC curve, review the implementation to make sure roc compute algorithm without using
-        # the following example sklearn predict_proba function is correct or not ??? ...
-        # probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
-        plot_tflearn_ROC(y_true, predicted, title, fig, nrow, ncol, plot_number, cmstr, annotate, drawplot)
-        return(aucValue,testAccuracy)
-
-
-
-  figid = plt.figure("ROC 2011-16Train201709Test Runid(%s) %s_%s" %(runId,preScalerClassName,opt.name),figsize=(10,8))
+  figid = plt.figure("ROC 2011-16Train201709Test Runid(%s) %s_%s_epoch%d_minibatch%d" %(runId,preScalerClassName,opt.name,epoch,minibatch),figsize=(10,8))
   figid.subplots_adjust(top=0.95, left=0.12, right=0.90,hspace=0.43, wspace=0.2)
 
   #evaluate the model with Training data
-  trainAuc,trainTa =evalprint(X, y,"with Training data %d epoch,loss=%0.4f " %(epoch,model.trainer.training_state.global_loss),\
+  trainAuc,trainTa,trainNa =evalprint(model,X, y,"with Training data,training loss=%0.4f" \
+                              %(model.trainer.training_state.global_loss),\
                               figid,2,1,1,False,True)
 
-  # evaluate the model with Test data
-  testAuc,testTa= evalprint(X_test, y_test, "with Test data %d minibatch,testAccuracy=%0.4f "
-                            %(minibatch,model.trainer.training_state.best_accuracy), figid, 2, 1, 2, False, True)
+  # evaluate the model with Test data  to be debuged
+  testAuc,testTa,testNa = evalprint(model,X_test, y_test, "with Test data ", \
+#                              %(model.trainer.training_state.val_loss,
+#                                model.trainer.training_state.val_acc),
+     figid, 2, 1, 2, False, True)
 
   endTime = time.time()  # end time in ms.
   elapseTime = (endTime - startTime)
@@ -697,7 +713,7 @@ def main():
   log("\nthe WHOLE ELAPSED time of loading data and training the model is %s"
                 % (duration))  # update test result  to file
 
-  plotName="%s_ROC2011-16%sTrain_201709Test_%s_alpha%0.4f_epoch%d_%d.png" %(runId,preScalerClassName,opt.name,learningrate,epoch,minibatch)
+  plotName="ROC2011-16Train_201709Test%s_%s_alpha%0.4f_epoch%d_%d.png" %(preScalerClassName,opt.name,learningrate,epoch,minibatch)
   fullpath = ''.join((EXPORT_DIR, runId))
   if os.path.isfile(fullpath):
         log("file %s exists, do not overwrite it!!!!" % fullpath)
@@ -706,14 +722,28 @@ def main():
   fullpath = ''.join((EXPORT_DIR, runId, '/', plotName))
   plt.savefig(fullpath, figsize=(10, 8))
 
+    # model.trainer.training_state.val_loss, \
+    # model.trainer.training_state.val_acc,\
+    # self.columnsname = ["RunId", "PreProcessor", "Optimizer", "regularization",
+    #                       "Alpha", "lrdecayrate", "decay_step","RS",
+    #                     "AUC(Train)",
+    #                     "Loss(Train)", "Accuracy(Train)",
+    #                     "AUC(Test)", "Accuracy(Test)", "NullAccuracy(Test)", \
+    #                     "Duration", "StartTime", "EndTime", "Epoch", "Minibatch", "ROC Curve Location"]
 
-
-
-  # update test result  to file
-  result = [runId, preScalerClassName, "%0.4f"%(trainAuc), "%0.4f"%testAuc, \
-            "%0.4f" %model.trainer.training_state.global_loss,\
-            "%0.4f" %model.trainer.training_state.best_accuracy,
-            duration, "%s"%(st), "%s"%(time.ctime()),str(epoch),str(minibatch),opt.name,fullpath]
+# update test result  to file according to above column sequence
+  result = [runId, preScalerClassName, opt.name,regularization,
+            "%0.4f" %learningrate,\
+            "%0.4f" %lrdecay,\
+            "%0.4f" %decaystep,\
+            "%d"    %rs,\
+            "%0.4f" %trainAuc,  \
+            "%0.4f" %model.trainer.training_state.global_loss, \
+            "%0.2f" %(trainTa*100)+'%', \
+            "%0.4f" %testAuc,\
+            "%0.2f" %(testTa*100)+'%', \
+            "%0.2f" %(testNa*100)+'%',\
+            duration, "%s"%(st), "%s"%(time.ctime()),str(epoch),str(minibatch),fullpath]
 
   trackRecord = TestResult(testResultfile)
 
@@ -735,37 +765,6 @@ def main():
   #
   #     keyp = raw_input("\nPlease input a row# to predict: (-1 to quit)")
   # log("End of program")
-
-
-#save the trained model to a file
-
-
-  # create_feature_spec_for_parsing  returns  a  dict  mapping  feature  keys  from feature_columns to
-  # FixedLenFeature or VarLenFeature  values.
-  # feature_spec = create_feature_spec_for_parsing(feature_columns)
-  #
-  # serving_input_fn = input_fn_utils.build_parsing_serving_input_fn(feature_spec)
-  # servable_model_dir = EXPORT_DIR
-  # servable_model_path = classifier.export_savedmodel(servable_model_dir, serving_input_fn,as_text=True)
-
-
-#export_savedmodel will save the model in a savedmodel format and return the string path to the exported directory.
-
-# servable_model_path will contain the following files:
-
-# saved_model.pb variables
-#   log('\nthe model has been saved to %s' %(servable_model_path))
-
-# trying to load the saved model to a new estimator and use it to predict new samples
-#   loadTrainedClassifier = tf.contrib.learn.DNNClassifier(feature_columns=feature_columns,
-#                                               hidden_units=[10,20,10],
-#                                               n_classes=3,
-#                                               model_dir=servable_model_path,\
-#                                               config=None
-#                                               )
-#   loadedVariablenames = loadTrainedClassifier.get_variable_names()
-#   print ('the loaded variable names are: ')
-#   print (loadedVariablenames)
 
 
 
