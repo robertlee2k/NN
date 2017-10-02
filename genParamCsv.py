@@ -29,12 +29,12 @@ class GenFile(object):
     def generate(self):  #self define logic here
         seqno=0
         for preprocessor in ['MinMax','Standard','MidRange']:
-            for opt in ['Adam','Momentum','RmsProp','SGD']:
+            for opt in ['Adam','Momentum','RMSProp','SGD']:
                 for regularization in ['None', 'L2','L1']:
-                    for alpha in [0.01]:
+                    for alpha in [0.01,0.001,0.0001]:
                         for lrdecay in [0.99]:
                             for decaystep in [100]:
-                                for epoch in [1000]:
+                                for epoch in [2000]:
                                     for minibatch in [16384]:
                                         for rs in [39987]:
                                             row = ['%d'%seqno,preprocessor,opt,regularization,alpha,lrdecay,

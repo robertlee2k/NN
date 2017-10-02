@@ -214,12 +214,15 @@ def main():
         loadmymodel = DnnModel(hpDict,runId+'load')  # use this runId to distinguish load model from original model, don't retrain the model
         try:
             loadmymodel.loadModel(hpDict,runId)         # load
-        except ValueError as ve:
-            log(ve)
-            log("\nSkip evaluate process ... ")
+        except IOError as ve:  #can't find the trained model from disk
+            log(ve.message)
+            log("\nWARNING:  Skip this evaluation process ... ")
             continue
-
-        loadmymodel.evaluate(hpDict,X,y,X_test,y_test) # output the ROC to disk with <runid>load folder name
+        except Exception:    # any other exceptions, just skip this evaluation, not a big deal
+            continue
+        else:
+            loadmymodel.evaluate(hpDict,X,y,X_test,y_test) # output the ROC to disk with <runid>load folder name
+            log('\nload trained model & reevaluate completed! ')
 
 
   endTime = time.time()  # end time in ms.

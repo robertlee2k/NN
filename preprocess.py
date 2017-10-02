@@ -124,10 +124,12 @@ class DataPreprocess(object):
     '''
     def __init__(self,preScalerString):
 
+        assert preScalerString in ('MinMax', 'Standard', 'MidRange')
 
         self.preScaler = dictMap[preScalerString]  # point to one of the  instance of a preprocess scaler class
 
         self.preScalerClassName = self.preScaler.__class__.__name__  # get classname as part of the title in ROC plot for readability
+
         self.dataScaler = None
 
 
@@ -138,7 +140,7 @@ class DataPreprocess(object):
         '''
         # my dataScaler does not need additional parameters. I just calculate scaler for all columns but will only apply
         # those to required columns in transform
-        assert self.preScalerClassName in ('MidRangeScaler','MinMaxScaler','StandardScaler')
+
 
         self.dataScaler = self.preScaler.fit(data_set.data)
         #log('the data range of features are %s' % self.dataScaler.data_range_)

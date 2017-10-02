@@ -18,6 +18,7 @@ EXPORT_DIR = "/home/topleaf/stock/savedModel/"  #export dir base
 testResultfile="DNN_Training_results.csv"
 
 
+
 def evalprint(model, X_predict, y_true, title,
               fig, nrow, ncol, plot_number, annotate=False, drawplot=True):
     '''
@@ -77,6 +78,9 @@ def evalprint(model, X_predict, y_true, title,
                      annotate, drawplot)
     return(aucValue,testAccuracy,nullAccuracy)
 
+#move this clause out of   _init_ of DnnModel class  to avoid creating multiple instances of 4 Optimizer classes
+optDictMap = {'Adam': tflearn.Adam(), 'Momentum': tflearn.Momentum(),
+                      'RMSProp': tflearn.RMSProp(),'SGD':tflearn.SGD()}
 class DnnModel(object):
     '''
     define a stock model for trial
@@ -92,9 +96,7 @@ class DnnModel(object):
                hpDict['decaystep'], hpDict['Epoch'], hpDict['Minibatch'],
                time.ctime()))
 
-        optDictMap = {'Adam': tflearn.Adam(), 'Momentum': tflearn.Momentum(),
-                      'RmsProp': tflearn.RMSProp(),'SGD':tflearn.SGD()}
-
+        assert hpDict['Optimizer'] in ('Adam', 'Momentum', 'RMSProp','SGD')
         self.opt = optDictMap[hpDict['Optimizer']]  # create an instance of an optimizer class
 
         self.runid = runid  # unique id for this model's instance
@@ -267,7 +269,7 @@ class DnnModel(object):
             log('load previous trained model:%s' %modelfullname)
             self.model.load(modelfullname,weights_only=True)
         else:
-            raise ValueError("model file %s doesn't exist, horrible, check the naming rule of saving/loading model" %modelfullname)
+            raise IOError("model file %s doesn't exist, horrible, check the naming rule of saving/loading model" %modelfullname)
 
 
 
