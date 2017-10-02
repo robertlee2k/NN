@@ -35,9 +35,9 @@ TESTDATASTART=1     # the row# of the starting in test csv file 2016-2017
 TESTDATASTOP=352425  # the last row of the whole file, this row# is excluded in test data
 
 TrainDataStart = 1
-TrainDataStop = TRAINDATASTOP  #for debugging purpose ,you can adjust this to get a small part for time saving now
+TrainDataStop = 300#TRAINDATASTOP  #for debugging purpose ,you can adjust this to get a small part for time saving now
 TestDataStart = 1 #350603
-TestDataStop = TESTDATASTOP # TESTDATASTOP     # for debugging purpose ,you can adjust this to get a small part for time saving now
+TestDataStop = 20#TESTDATASTOP # TESTDATASTOP     # for debugging purpose ,you can adjust this to get a small part for time saving now
 
 
 trainfilename = "/home/topleaf/stock/tensorFlowData/v_onceyield_group9all_2013-2015.csv"  # training data file
@@ -422,7 +422,7 @@ def main():
 
 
        net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
-                             regularizer='L2', weight_decay=0.001, name='hidderlayer1')
+                             regularizer=None, weight_decay=0.001, name='hidderlayer1')
        net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',
                              regularizer='L2', weight_decay=0.001, name='hidderlayer2')
        net = tflearn.fully_connected(net, 80, activation='relu', weights_init='xavier', bias_init='normal',

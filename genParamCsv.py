@@ -37,10 +37,10 @@ class GenFile(object):
                                 for epoch in [1000]:
                                     for minibatch in [16384]:
                                         for rs in [39987]:
-                                            seqno+=1
                                             row = ['%d'%seqno,preprocessor,opt,regularization,alpha,lrdecay,
                                                    decaystep,rs,epoch,minibatch]
                                             self.append(row)
+                                            seqno += 1
         print ('\n%s is generated' %self.filename)
 
 
@@ -54,6 +54,7 @@ def main():
     opts, args = getopt.getopt(sys.argv[1:], "ho:")
     for op, value in opts:
         if op == "-o":
+            global paramfile
             paramfile = value
         elif op == "-h":
             usage()
@@ -61,7 +62,7 @@ def main():
         else:
             usage()
             sys.exit()
-    paramfile = "HyperParamSearchPlan.csv"
+
     if os.path.exists(paramfile):
         response= raw_input('\nthe output file %s exists, do you want to overwrite it ?(y/n)' %paramfile)
         if response == 'y' or response=='Y':

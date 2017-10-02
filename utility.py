@@ -48,7 +48,7 @@ def printConfusionMatrix(cm):
 #visualize  the batch features in both a scatter subplot to review the min-max range of the features in a whole picture
 # and a subplot of histogram for each features' distribution
 
-def plotFeatures(batch,datasetFeatureNames,desc=None,savePlotToDisk=True,scatterAdjust=False):
+def plotFeatures(batch,datasetFeatureNames,featureidlist,desc=None,savePlotToDisk=True,scatterAdjust=False):
     """
 batch: is 2-D matrix [n_sample,n_feature]
 datasetFeatureNames: a list that contains all the feature names in the same order as batch
@@ -69,8 +69,10 @@ absolute min/max value in one scatter plot
         # xscatter.append(j)
         # yscatter.append(y.max())
 
+    assert type(featureidlist)==list
 
-    for j in range(n_feature): # for all features
+    for j in featureidlist: # for all required features
+
         log("Plotting %s feature# %d in progress,time = %s " %(desc,j,(time.ctime())))
         featureFig = plt.figure("plotFeature"+str(j)+"_"+str(datasetFeatureNames[j]), figsize=(8, 6))
         featureFig.subplots_adjust(top=0.92, left=0.10, right=0.97,hspace=0.37, wspace=0.3)

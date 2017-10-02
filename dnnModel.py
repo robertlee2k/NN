@@ -13,7 +13,7 @@ from testResult import TestResult
 
 from plot_tflearn_roc_auc import plot_tflearn_ROC #for plotting ROC curve
 
-EXPORT_DIR = "/tmp/savedstockmodel/"  #export dir base
+EXPORT_DIR = "/home/topleaf/stock/savedModel/"  #export dir base
 
 testResultfile="DNN_Training_results.csv"
 
@@ -85,9 +85,8 @@ class DnnModel(object):
     def __init__(self, hpDict, runid):
         self.startTime = time.time()  # start time in ms.
         self.st = time.ctime()  # start time in date/time format
-        log('\n %s ----> After applying %s preprocessor %s, building the DNN Model'
-            ' (rs=%s,alpha=%s,decayrate=%s,decaystep=%s) \
-             for %s epoches with mini_batch size of %s in progress ... time:%s' \
+        log('\n %s ----> After applying %s preprocessor %s, building the DNN Model\
+            (rs=%s,alpha=%s,decayrate=%s,decaystep=%s) for %s epoches with mini_batch size of %s in progress ... time:%s' \
             % (hpDict['Seqno'], hpDict['Preprocessor'], hpDict['Optimizer'],
                hpDict['RS'], hpDict['Alpha'], hpDict['lrdecay'],
                hpDict['decaystep'], hpDict['Epoch'], hpDict['Minibatch'],
@@ -101,7 +100,10 @@ class DnnModel(object):
         self.runid = runid  # unique id for this model's instance
         self.epoch = long(hpDict['Epoch'])
         self.learningrate = float(hpDict['Alpha'])
-        self.regularization=hpDict['Regularization']
+        if hpDict['Regularization']=='None':
+            self.regularization=None
+        else:
+            self.regularization=hpDict['Regularization']
 
         self.minibatch = long(hpDict['Minibatch'])  # 16384  # 8192
         self.lrdecay = float(hpDict['lrdecay'])
@@ -124,7 +126,7 @@ class DnnModel(object):
         net = tflearn.regression(net, optimizer=self.opt, loss='categorical_crossentropy', metric=acc, \
                                  to_one_hot=True, n_classes=2)
 
-        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_12thlogs/", tensorboard_verbose=0)
+        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_13thlogs/", tensorboard_verbose=0)
 
         self.model = model
 
@@ -145,7 +147,7 @@ class DnnModel(object):
         # try pca
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
-        net = tflearn.input_data([None, 165], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+        net = tflearn.input_data([None, 166], data_preprocessing=None, data_augmentation=None, name="inputlayer")
         net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer1')
         net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
@@ -227,7 +229,7 @@ class DnnModel(object):
         :param hpDict: including all the required hyper parameters of this model
         :return: None
         '''
-        self.modelfilename = "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.2f_decaystep%d_epoch%d_batch%d_TrainedModel" \
+        self.modelfilename = "2015-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
                         % (hpDict['Preprocessor'], self.runid, self.opt.name,
                            self.learningrate, self.lrdecay,self.decaystep,
                            self.epoch,self.minibatch)
@@ -244,6 +246,32 @@ class DnnModel(object):
             fullpath = ''.join((EXPORT_DIR, self.runid, '/', self.modelfilename))
             log('\ntraining completed, folder exists, overwrite it with new model as %s' % fullpath)
             self.model.save(fullpath)
+
+    def loadModel(self,hpDict,name):
+        '''
+        load weight from a previous trained model from disk
+        :param name: unique ame can be used to retrieve the model's filename from disk
+        :return: model
+        '''
+
+
+        modelfilename = "2015-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
+                            % (hpDict['Preprocessor'], name, hpDict['Optimizer'],
+                               float(hpDict['Alpha']), float(hpDict['lrdecay']), float(hpDict['decaystep']),
+                               int(hpDict['Epoch']), int(hpDict['Minibatch']))
+
+        modelfullname = ''.join((EXPORT_DIR, name,'/',modelfilename))
+
+
+        if os.path.exists(modelfullname+'.meta'):
+            log('load previous trained model:%s' %modelfullname)
+            self.model.load(modelfullname,weights_only=True)
+        else:
+            raise ValueError("model file %s doesn't exist, horrible, check the naming rule of saving/loading model" %modelfullname)
+
+
+
+
 
     def evaluate(self,hpDict,X,y,X_test,y_test):
         '''
@@ -262,7 +290,7 @@ class DnnModel(object):
         # Serial   number  of failed request:  1505
         #   Current   serial  number in output  stream:  1507
         try:
-            figid = plt.figure("ROC 2011-16Train201709Test Runid(%s) %s_%s_epoch%d_minibatch%d"
+            figid = plt.figure("ROC 2015-16Train201709Test Runid(%s) %s_%s_epoch%d_minibatch%d"
                                % (self.runid, hpDict['Preprocessor'], self.opt.name,
                                   self.epoch, self.minibatch), figsize=(10, 8))
             figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
@@ -279,7 +307,7 @@ class DnnModel(object):
 
             # update test result  to file
 
-            plotName = "ROC2011-16Train_201709Test%s_%s_alpha%0.4f_epoch%d_%d.png" \
+            plotName = "ROC2015-16Train_201709Test%s_%s_alpha%0.4f_epoch%d_%d.png" \
                        % (hpDict['Preprocessor'], self.opt.name, self.learningrate,
                           self.epoch, self.minibatch)
             fullpath = ''.join((EXPORT_DIR, self.runid))
@@ -330,8 +358,6 @@ class DnnModel(object):
             print(Exception)
             print(e1)
             print ('=' * 30 + "end of print exception" + '=' * 30)
-        finally:
-            log("DEBUGGING X ERROR CODE END")
 
         endTime = time.time()  # end time in ms.
         elapseTime = (endTime - self.startTime)
