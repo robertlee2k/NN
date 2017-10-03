@@ -14,7 +14,7 @@ class GenFile(object):
     def __init__(self,filename):
         self.columnsname = ["Seqno","Preprocessor", "Optimizer", "Regularization",
                             "Alpha", "lrdecay", "decaystep", "RS",
-                            "Epoch", "Minibatch"]
+                            "Epoch", "Minibatch","Skip"]
         self.filename = filename
         if os.path.exists(filename) == False:
             with open(filename, 'w') as csv_file:

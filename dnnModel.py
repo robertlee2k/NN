@@ -81,10 +81,19 @@ def evalprint(model, X_predict, y_true, title,
 #move this clause out of   _init_ of DnnModel class  to avoid creating multiple instances of 4 Optimizer classes
 optDictMap = {'Adam': tflearn.Adam(), 'Momentum': tflearn.Momentum(),
                       'RMSProp': tflearn.RMSProp(),'SGD':tflearn.SGD()}
+from hyperParam import supportedOptimizer,supportedRegularization
+
 class DnnModel(object):
     '''
     define a stock model for trial
     '''
+    __instance=None                 #this is the class' private attribute
+
+    def __new__(cls, *args, **kwargs):      #this methold is called before __init() by default to instantiate an instance
+        if DnnModel.__instance==None:
+            DnnModel.__instance = object.__new__(cls, *args, **kwargs)
+        return DnnModel.__instance
+
 
     def __init__(self, hpDict, runid):
         self.startTime = time.time()  # start time in ms.
@@ -96,12 +105,15 @@ class DnnModel(object):
                hpDict['decaystep'], hpDict['Epoch'], hpDict['Minibatch'],
                time.ctime()))
 
-        assert hpDict['Optimizer'] in ('Adam', 'Momentum', 'RMSProp','SGD')
+        assert hpDict['Optimizer'] in  supportedOptimizer
         self.opt = optDictMap[hpDict['Optimizer']]  # create an instance of an optimizer class
 
         self.runid = runid  # unique id for this model's instance
         self.epoch = long(hpDict['Epoch'])
         self.learningrate = float(hpDict['Alpha'])
+
+        assert hpDict['Regularization'] in supportedRegularization
+
         if hpDict['Regularization']=='None':
             self.regularization=None
         else:
@@ -150,13 +162,13 @@ class DnnModel(object):
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
         net = tflearn.input_data([None, 166], data_preprocessing=None, data_augmentation=None, name="inputlayer")
-        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer1')
-        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer2')
-        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer3')
-        net = tflearn.fully_connected(net, 150, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer4')
         # net = tflearn.fully_connected(net, 80,  activation='sigmoid',name='hidderlayer5')
         #

@@ -55,7 +55,7 @@ from tensorflow.python.platform import gfile
 from utility import log,plotFeatures
 from dnnModel import DnnModel
 from preprocess import DataPreprocess
-from hyperParam import HyperParam
+from hyperParam import HyperParam,supportedSkip
 
 
 
@@ -135,6 +135,26 @@ def main():
 
   runStartTime=time.time();  # start time in ms.
   st=time.ctime()  #start time in date/time format
+
+  # instantiate a HyperParam class to read  hyperparameter search plan into a list
+  # do sanity check to make sure all input parameters are valid before going further
+  try:
+        hpIns = HyperParam(hyperParamSetFile)
+        hpIns.sanityCheck()
+  except ValueError as e:
+        log("\nValueError Exception:")
+        log(e.message)
+        return
+  except KeyError as e:
+        log("KeyError Exception happened")
+        log(e.message)
+        return
+
+  else:
+        log("\n sanity check on search plan file(%s) PASSED " %hyperParamSetFile)
+
+
+
   log('\nloading training data from file %s in progress ... time:%s' %(trainfilename,st))
   #Load datasets. discard column 0,1,3,4 in the original csvfile ,which represent  id ,tradedate,mc_date,datadate
 
@@ -173,8 +193,7 @@ def main():
   # plot original test data to review
   #plotFeatures(test_set.data,test_set.featurenames,"Orig17Jan-17Septest",savePlotToDisk=True,scatterAdjust=False)
 
-  # instantiate a HyperParam class to read  hyperparameter search plan into a list
-  hpIns = HyperParam(hyperParamSetFile)
+
 
   y = training_set.target
 
@@ -182,7 +201,16 @@ def main():
 
 
   for  seqid in range(0,hpIns.rows.__len__()):
-        hpDict,preProcessChanged = hpIns.readRow(rowId=seqid)
+        try:
+          preProcessChanged,hpDict = hpIns.readRow(rowId=seqid)
+        except ValueError as e:
+            log("WARNING: exception captured")
+            log(e.message)
+            log("\nSkip seqid=%d  and continue to next iteration, please double check your settings in %s" %(seqid,hpIns.filename))
+            continue
+
+        if hpDict['Skip'] == supportedSkip[2] or hpDict['Skip']==supportedSkip[3]:   # this row is comment out, not run
+            continue
 
         if preProcessChanged:  # this row's preprocessor is different from last one,apply preprocessing
             log('\n Seqno %d : preProcess is required to be redone,since we need to apply a preprocessor different from last run' %seqid)
@@ -193,6 +221,7 @@ def main():
             #plotFeatures(X, training_set.featurenames, [0,1,2,43,112],hpDict['Preprocessor']+str(seqid)+'train',savePlotToDisk=True,scatterAdjust=False)
             X_test = dp.transform(test_set)   #use the same scaler to transform test_set.data
             #plotFeatures(X_test, test_set.featurenames, [0,1,2,43,112],hpDict['Preprocessor']+str(seqid)+'test',savePlotToDisk=True,scatterAdjust=False)
+            #del dp  # release the instance of dp, give system chance to gc it
         else:
             log("\nSeqno %d : Skip preprocess since this is the same preprocessor as the last time,X,X_test have been preprocessed last time" %seqid)
 
@@ -209,20 +238,23 @@ def main():
         mymodel.saveModel(hpDict)
         mymodel.evaluate(hpDict,X,y,X_test,y_test)
 
+        #del mymodel  # delete instance of DNNModel since its task has come to an end. let system to gc it
+
       #initiate a empty model, load the weight from the the saved model to reevaluate,double check the model's load function
-        tf.reset_default_graph()
-        loadmymodel = DnnModel(hpDict,runId+'load')  # use this runId to distinguish load model from original model, don't retrain the model
-        try:
-            loadmymodel.loadModel(hpDict,runId)         # load
-        except IOError as ve:  #can't find the trained model from disk
-            log(ve.message)
-            log("\nWARNING:  Skip this evaluation process ... ")
-            continue
-        except Exception:    # any other exceptions, just skip this evaluation, not a big deal
-            continue
-        else:
-            loadmymodel.evaluate(hpDict,X,y,X_test,y_test) # output the ROC to disk with <runid>load folder name
-            log('\nload trained model & reevaluate completed! ')
+        # tf.reset_default_graph()
+        # loadmymodel = DnnModel(hpDict,runId+'load')  # use this runId to distinguish load model from original model, don't retrain the model
+        # try:
+        #     loadmymodel.loadModel(hpDict,runId)         # load
+        # except IOError as ve:  #can't find the trained model from disk
+        #     log(ve.message)
+        #     log("\nWARNING:  Skip this evaluation process ... ")
+        #     continue
+        # except Exception:    # any other exceptions, just skip this evaluation, not a big deal
+        #     continue
+        # else:
+        #     loadmymodel.evaluate(hpDict,X,y,X_test,y_test) # output the ROC to disk with <runid>load folder name
+        #     log('\nload trained model & reevaluate completed! ')
+        # del loadmymodel
 
 
   endTime = time.time()  # end time in ms.

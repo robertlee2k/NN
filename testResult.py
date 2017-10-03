@@ -10,9 +10,17 @@ class TestResult(object):
     with block + open method has a good feature: when the with block is exit, open api will close this file
     automatically in its __exit__() method, so this file is correctly closed when not in use.
     """
+    __instance = None  # define instance of the class
+
+    # use the code to generate only one instance of the class
+    def __new__(cls, *args, **kwargs):  # this method is called before __init__()
+        if TestResult.__instance == None:
+            TestResult.__instance = object.__new__(cls, *args, **kwargs)
+        return TestResult.__instance
+
     def __init__(self,filename):
-        self.columnsname=["Seqno","RunId","PreProcessor","Optimizer","regularization",
-                          "Alpha","lrdecayrate","decay_step","RS",
+        self.columnsname=["Seqno","RunId","PreProcessor","Optimizer","Regularization",
+                          "Alpha","lrdecay","decaystep","RS",
                           "AUC(Train)","Loss(Train)","Accuracy(Train)",
                           "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",\
                           "Duration","StartTime","EndTime","Epoch","Minibatch","ROC Curve Location"]

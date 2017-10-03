@@ -116,17 +116,27 @@ class MidRangeScaler(object):
         return X
 
 #move this clause out of   _init_ of DataPreprocess class  to avoid creating multiple instances of 3 scaler classes
-dictMap = {'MinMax': MinMaxScaler(), 'Standard': StandardScaler(), 'MidRange': MidRangeScaler()}
+scalerDictMap = {'MinMax': MinMaxScaler(), 'Standard': StandardScaler(), 'MidRange': MidRangeScaler()}
+from hyperParam import supportedScaler
 
 class DataPreprocess(object):
     '''
     :param preScalerString is the abbreviation name of the the scaler in string format
     '''
+    __instance = None       #define instance of the class
+
+    #use the code to generate only one instance of the class
+    def __new__(cls, *args, **kwargs):    # this method is called before __init__()
+        if DataPreprocess.__instance == None:
+            DataPreprocess.__instance = object.__new__(cls, *args, **kwargs)
+        return DataPreprocess.__instance
+
+
     def __init__(self,preScalerString):
 
-        assert preScalerString in ('MinMax', 'Standard', 'MidRange')
+        assert preScalerString in supportedScaler
 
-        self.preScaler = dictMap[preScalerString]  # point to one of the  instance of a preprocess scaler class
+        self.preScaler = scalerDictMap[preScalerString]  # point to one of the  instance of a preprocess scaler class
 
         self.preScalerClassName = self.preScaler.__class__.__name__  # get classname as part of the title in ROC plot for readability
 
