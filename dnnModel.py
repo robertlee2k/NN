@@ -73,7 +73,8 @@ def evalprint(model, X_predict, y_true, title,
     # the following example sklearn predict_proba function is correct or not ??? ...
     # probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
     plot_tflearn_ROC(y_true, predicted, title, fig, nrow, ncol, plot_number,\
-                     cmstr+'\n'+ 'NullAccuracy= {}%'.format("%0.2f"%(100*nullAccuracy))+\
+                     cmstr+ 'Y=1 Percent= {}%'.format("%0.2f"%(100*y_true.mean()))+\
+                     '\n'+ 'NullAccuracy= {}%'.format("%0.2f"%(100*nullAccuracy))+\
                      '\n'+'Accuracy={}%'.format("%0.2f"%(100*testAccuracy)), \
                      annotate, drawplot)
     return(aucValue,testAccuracy,nullAccuracy)
@@ -98,9 +99,9 @@ class DnnModel(object):
     def __init__(self, hpDict, runid):
         self.startTime = time.time()  # start time in ms.
         self.st = time.ctime()  # start time in date/time format
-        log('\n %s ----> After applying %s preprocessor %s, building the DNN Model\
+        log('\n %s ----> After applying %s preprocessor %s,regularization=%s,keep_prob=%s building the DNN Model\
             (rs=%s,alpha=%s,decayrate=%s,decaystep=%s) for %s epoches with mini_batch size of %s in progress ... time:%s' \
-            % (hpDict['Seqno'], hpDict['Preprocessor'], hpDict['Optimizer'],
+            % (hpDict['Seqno'], hpDict['Preprocessor'], hpDict['Optimizer'],hpDict['Regularization'],hpDict['KeepProb'],
                hpDict['RS'], hpDict['Alpha'], hpDict['lrdecay'],
                hpDict['decaystep'], hpDict['Epoch'], hpDict['Minibatch'],
                time.ctime()))
@@ -109,8 +110,9 @@ class DnnModel(object):
         self.opt = optDictMap[hpDict['Optimizer']]  # create an instance of an optimizer class
 
         self.runid = runid  # unique id for this model's instance
-        self.epoch = long(hpDict['Epoch'])
+        self.epoch = int(hpDict['Epoch'])
         self.learningrate = float(hpDict['Alpha'])
+        self.keepProb= float(hpDict['KeepProb'])
 
         assert hpDict['Regularization'] in supportedRegularization
 
@@ -119,7 +121,7 @@ class DnnModel(object):
         else:
             self.regularization=hpDict['Regularization']
 
-        self.minibatch = long(hpDict['Minibatch'])  # 16384  # 8192
+        self.minibatch = int(hpDict['Minibatch'])  # 16384  # 8192
         self.lrdecay = float(hpDict['lrdecay'])
         self.decaystep = float(hpDict['decaystep'])
         self.rs = int(hpDict['RS'])
@@ -140,7 +142,7 @@ class DnnModel(object):
         net = tflearn.regression(net, optimizer=self.opt, loss='categorical_crossentropy', metric=acc, \
                                  to_one_hot=True, n_classes=2)
 
-        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_13thlogs/", tensorboard_verbose=0)
+        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_22thlogs/", tensorboard_verbose=0)
 
         self.model = model
 
@@ -162,28 +164,33 @@ class DnnModel(object):
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
         net = tflearn.input_data([None, 166], data_preprocessing=None, data_augmentation=None, name="inputlayer")
-        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer1')
-        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.dropout(net,keep_prob=self.keepProb,noise_shape=None,name='dropoutlayer1')
+        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer2')
-        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer2')
+        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer3')
-        net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer3')
+        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer4')
-        # net = tflearn.fully_connected(net, 80,  activation='sigmoid',name='hidderlayer5')
-        #
-        # net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
-        #                                      regularizer='L2', weight_decay=0.001, name='hidderlayer6')
-        #
-        #
-        #  net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
-        #                                regularizer='L2', weight_decay=0.001, name='hidderlayer7')
-        #  net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
-        #                                regularizer='L2', weight_decay=0.001, name='hidderlayer8')
-        #  net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
-        #                                regularizer='L2', weight_decay=0.001, name='hidderlayer9')
-        #  net = tflearn.fully_connected(net, 10, activation='relu', weights_init='xavier',
-        #                                regularizer='L2', weight_decay=0.001, name='hidderlayer10')
+        net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer4')
+        # net = tflearn.fully_connected(net, 100,  activation='relu',weights_init=xavierInit, bias_init=normalInit,
+        #                               regularizer=self.regularization, weight_decay=0.001,name='hidderlayer5')
+
+        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer6')
+        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer7')
+        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer8')
+        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer9')
+        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer10')
+
+
 
         net = tflearn.fully_connected(net, 2, activation='softmax', weights_init=xavierInit, bias_init=normalInit,
                                       name='outputlayer')
@@ -243,7 +250,7 @@ class DnnModel(object):
         :param hpDict: including all the required hyper parameters of this model
         :return: None
         '''
-        self.modelfilename = "2015-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
+        self.modelfilename = "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
                         % (hpDict['Preprocessor'], self.runid, self.opt.name,
                            self.learningrate, self.lrdecay,self.decaystep,
                            self.epoch,self.minibatch)
@@ -269,7 +276,7 @@ class DnnModel(object):
         '''
 
 
-        modelfilename = "2015-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
+        modelfilename = "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
                             % (hpDict['Preprocessor'], name, hpDict['Optimizer'],
                                float(hpDict['Alpha']), float(hpDict['lrdecay']), float(hpDict['decaystep']),
                                int(hpDict['Epoch']), int(hpDict['Minibatch']))
@@ -304,7 +311,7 @@ class DnnModel(object):
         # Serial   number  of failed request:  1505
         #   Current   serial  number in output  stream:  1507
         try:
-            figid = plt.figure("ROC 2015-16Train201709Test Runid(%s) %s_%s_epoch%d_minibatch%d"
+            figid = plt.figure("ROC 2011-16Train201709Test Runid(%s) %s_%s_epoch%d_minibatch%d"
                                % (self.runid, hpDict['Preprocessor'], self.opt.name,
                                   self.epoch, self.minibatch), figsize=(10, 8))
             figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
@@ -321,7 +328,7 @@ class DnnModel(object):
 
             # update test result  to file
 
-            plotName = "ROC2015-16Train_201709Test%s_%s_alpha%0.4f_epoch%d_%d.png" \
+            plotName = "ROC2011-16Train_201709Test%s_%s_alpha%0.4f_epoch%d_%d.png" \
                        % (hpDict['Preprocessor'], self.opt.name, self.learningrate,
                           self.epoch, self.minibatch)
             fullpath = ''.join((EXPORT_DIR, self.runid))
@@ -348,6 +355,7 @@ class DnnModel(object):
             # update test result  to file according to above column sequence
             result = [hpDict['Seqno'],self.runid, hpDict['Preprocessor'], self.opt.name,
                       self.regularization,
+                      "%0.2f" % self.keepProb,
                       "%0.4f" % self.learningrate,
                       "%0.4f" % self.lrdecay,
                       "%0.4f" % self.decaystep,

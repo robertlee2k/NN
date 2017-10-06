@@ -12,7 +12,7 @@ def usage():
 
 class GenFile(object):
     def __init__(self,filename):
-        self.columnsname = ["Seqno","Preprocessor", "Optimizer", "Regularization",
+        self.columnsname = ["Seqno","Preprocessor", "Optimizer", "Regularization","KeepProb",
                             "Alpha", "lrdecay", "decaystep", "RS",
                             "Epoch", "Minibatch","Skip"]
         self.filename = filename
@@ -28,19 +28,21 @@ class GenFile(object):
                 writer.writerow(rows)
     def generate(self):  #self define logic here
         seqno=0
-        for preprocessor in ['MinMax','Standard','MidRange']:
-            for opt in ['Adam','Momentum','RMSProp','SGD']:
+        for preprocessor in ['Standard']:
+            for opt in ['Adam']:
                 for regularization in ['None', 'L2','L1']:
-                    for alpha in [0.01,0.001,0.0001]:
+                    for alpha in [0.001]:
                         for lrdecay in [0.99]:
                             for decaystep in [100]:
-                                for epoch in [2000]:
+                                for epoch in [1000]:
                                     for minibatch in [16384]:
                                         for rs in [39987]:
-                                            row = ['%d'%seqno,preprocessor,opt,regularization,alpha,lrdecay,
-                                                   decaystep,rs,epoch,minibatch]
-                                            self.append(row)
-                                            seqno += 1
+                                            for keepProb in [0.1,0.2,0.4,0.6,0.8,0.9]:
+
+                                                row = ['%d'%seqno,preprocessor,opt,regularization,keepProb,alpha,lrdecay,
+                                                   decaystep,rs,epoch,minibatch,'N']
+                                                self.append(row)
+                                                seqno += 1
         print ('\n%s is generated' %self.filename)
 
 

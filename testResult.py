@@ -19,7 +19,7 @@ class TestResult(object):
         return TestResult.__instance
 
     def __init__(self,filename):
-        self.columnsname=["Seqno","RunId","PreProcessor","Optimizer","Regularization",
+        self.columnsname=["Seqno","RunId","PreProcessor","Optimizer","Regularization",'KeepProb'
                           "Alpha","lrdecay","decaystep","RS",
                           "AUC(Train)","Loss(Train)","Accuracy(Train)",
                           "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",\

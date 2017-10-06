@@ -8,6 +8,7 @@ supportedOptimizer= ('Adam', 'Momentum', 'RMSProp','SGD')
 supportedScaler =('MinMax', 'Standard', 'MidRange')
 supportedRegularization = ('None','L2','L1')
 supportedSkip=('N','n','Y','y')  #  'y'or 'Y' mark the row as skipping
+selectedAvgline=('5','10','20','30','60')  # only load training and test data whose avglines are in this tuple
 
 class HyperParam(object):
     '''
@@ -79,7 +80,7 @@ class HyperParam(object):
 
 
                 tmp=int(row['Seqno'])+int(row['decaystep'])+int(row['RS'])+int(row['Epoch'])+int(row['Minibatch'])
-                tmp=float(row['Alpha'])+float(row['lrdecay'])
+                tmp=float(row['Alpha'])+float(row['lrdecay'])+float(row['KeepProb'])
             except ValueError as e:
                 log(e.message)
                 log("\nFatal Error: wrong data type in seq %s" %(row['Seqno']))
