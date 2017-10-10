@@ -62,6 +62,62 @@ from hyperParam import HyperParam,supportedSkip,selectedAvgline
 
 Dataset = collections.namedtuple('Dataset',['data','target','featurenames'])
 
+def load_csv_calc_profit(filename,
+                         start_rowid,
+                         end_rowid,
+                         fromDate,
+                         toDate,
+                         target_column=-1,
+                         selectedAvgline=selectedAvgline):
+    '''
+
+    :param filename: data file name
+    :param start_rowid:
+    :param end_rowid:
+    :param fromDate:
+    :param toData:
+    :param target_column: shouyilv column' index
+    :param selectedAvgline:  which avglines are included in the calculation
+    :return:  the simple profit/loss rate for all the transactions
+    '''
+
+    log("Loading %s and Calculating the overall profit rate when selecting %s Avglines..." %(filename,selectedAvgline))
+    with gfile.Open(filename)  as csv_file:
+        data_file=csv.reader(csv_file)
+
+        hitCount = 0  # the total row number that has been calculated
+        stDate = datetime.datetime.strptime(fromDate, "%Y/%m/%d")
+        endDate = datetime.datetime.strptime(toDate, "%Y/%m/%d")
+        amount=[]     #initial investment, y axis
+        x=[]        #x axis , valid transaction number
+        capital=1.0
+
+        for i, row in enumerate(data_file):
+            if i < start_rowid:  # or i > end_rowid:
+                continue  # skip the rows between start_rowid and end_rowid
+            elif i > end_rowid:
+                log("\n WARNING: skipping rows in %s after line# %d, NOT FULL data are loaded" % (filename, i))
+                break  # skip reading the rest of the file
+            else:
+                dt = datetime.datetime.strptime(row[DataDateColumn],
+                                                "%Y/%m/%d")  # convert DataDate from string to datetime format
+                if dt >= stDate and dt <= endDate:  # read the desired data between 'From' and 'To' date
+                    if row[SelectedAvglineColumn] in selectedAvgline:  # only load the required rows that match the avgline parameters
+                        capital=capital*(1+float(row[target_column]))
+                        amount.append(capital)
+                        hitCount += 1
+                        x.append(hitCount)
+                        if capital <=0.01:  # if lost 99% of the initial investment
+                            break  # skip the calculation and plot how the disaster happened
+                    else:
+                        print('Attention: this row[%d] SelectedAvgline is not in %s,so  discard this row' %(i,selectedAvgline))
+                else:
+                    print ('attention:  this row[%d] dataDate %s is not between [%s,%s],so discard this row' %(i, row[DataDateColumn],fromDate,toDate))
+        log("\nThe overall profit/loss ratio in %s file with transactions %d out of %d is:" %(filename,hitCount,i))
+        rate=(capital-1.0)/1.0
+        log(" {}%".format("%0.4f" %(100*rate)))
+        from utility import plotAmountOverTransaction
+        plotAmountOverTransaction(x,amount,filename+" Selected Avgline="+selectedAvgline.__str__())
 
 
 def load_partcsv_without_header(filename,
@@ -138,8 +194,21 @@ def load_partcsv_without_header(filename,
 
 def main():
 
+  # show the overall profit or loss rate when strictly follow the rule of buying and selling stock for each selectedAvgLine
+  # load_csv_calc_profit(trainfilename,start_rowid=TrainDataStart,end_rowid=TrainDataStop,
+  #                      fromDate='2010/12/31',
+  #                      toDate='2016/12/29',
+  #                      target_column=-1,
+  #                      selectedAvgline=selectedAvgline)
+  #
+  # load_csv_calc_profit(testfilename, start_rowid=TestDataStart, end_rowid=TestDataStop,
+  #                      fromDate='2016/12/30',
+  #                      toDate='2017/09/19',
+  #                      target_column=-1,
+  #                      selectedAvgline=selectedAvgline)
+  # return
 
-  runStartTime=time.time();  # start time in ms.
+  runStartTime=time.time()  # start time in ms.
   st=time.ctime()  #start time in date/time format
 
   # instantiate a HyperParam class to read  hyperparameter search plan into a list
@@ -158,7 +227,6 @@ def main():
 
   else:
         log("\n sanity check on search plan file(%s) PASSED " %hyperParamSetFile)
-
 
 
   log('\nloading training data from file %s in progress ... time:%s' %(trainfilename,st))
@@ -180,7 +248,7 @@ def main():
       selectedAvgline = selectedAvgline
   )
   # plot original data to review
-  plotFeatures(training_set.data,training_set.featurenames,[1],"Orig11Jan-16Dectrain",savePlotToDisk=True,scatterAdjust=False)
+  #plotFeatures(training_set.data,training_set.featurenames,[1],"Orig11Jan-16Dectrain",savePlotToDisk=True,scatterAdjust=False)
 
   log('\nloading test data from file %s in progress ... time:%s' % (testfilename, time.ctime()))
   test_set = load_partcsv_without_header(
@@ -199,7 +267,7 @@ def main():
 
 
   # plot original test data to review
-  plotFeatures(test_set.data,test_set.featurenames,[1],"Orig17Jan-17Septest",savePlotToDisk=True,scatterAdjust=False)
+  #plotFeatures(test_set.data,test_set.featurenames,[1],"Orig17Jan-17Septest",savePlotToDisk=True,scatterAdjust=False)
 
   y = training_set.target
 

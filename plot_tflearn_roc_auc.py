@@ -70,13 +70,37 @@ def plot_tflearn_ROC(y_test,y_probas_,title,fig,nrow, ncol, plot_number,anytext=
     axn = fig.add_subplot(nrow, ncol, plot_number)
     axn.plot(fpr, tpr, lw=2, alpha=0.3,
              label='ROC (AUC = %0.4f)' % roc_auc)
+    axn.grid(True)
     # annotate the thresholds on this fold
     if annotate:
+        ano0=ano1=ano2=ano3=False
         for j in xrange(len(thresholds)):
-            axn.annotate(str(thresholds[j]), xy=(fpr[j], tpr[j]), xycoords='data',
-                         xytext=(-20, 10), textcoords='offset points',
+            if (thresholds[j] <=0.501 and thresholds[j]>=0.50 and ano0==False): #point out the default threshold
+                ano0=True
+                axn.annotate(str(thresholds[j]), xy=(fpr[j], tpr[j]), xycoords='data',
+                             xytext=(-20, 20 * (j % 4) + 1), textcoords='offset points',
+                             arrowprops=dict(facecolor='black', arrowstyle='->'),
+                             horizontalalignment='right', verticalalignment='bottom')
+                #axn.text(fpr[j],0,str(fpr[j]))
+            if (fpr[j] <= 0.051 and fpr[j] >=0.05 and ano1==False):
+                 ano1=True
+                 axn.annotate(str(thresholds[j]), xy=(fpr[j], tpr[j]), xycoords='data',
+                         xytext=(-20, 20*(j%4)+1), textcoords='offset points',
                          arrowprops=dict(facecolor='black', arrowstyle='->'),
                          horizontalalignment='right', verticalalignment='bottom')
+            elif (fpr[j]>=0.1 and fpr[j]<=0.105 and ano2==False):
+                 ano2 = True
+                 axn.annotate(str(thresholds[j]), xy=(fpr[j], tpr[j]), xycoords='data',
+                         xytext=(-20, 20 * (j % 4) + 1), textcoords='offset points',
+                         arrowprops=dict(facecolor='black', arrowstyle='->'),
+                         horizontalalignment='right', verticalalignment='bottom')
+
+            elif (fpr[j]>= 0.2 and fpr[j]<=0.205 and ano3==False):  #only annotate those interested thresholds)
+                 ano3 = True
+                 axn.annotate(str(thresholds[j]), xy=(fpr[j], tpr[j]), xycoords='data',
+                             xytext=(-20, 20 * (j % 4) + 1), textcoords='offset points',
+                             arrowprops=dict(facecolor='black', arrowstyle='->'),
+                             horizontalalignment='right', verticalalignment='bottom')
 
     axn.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
              label='Luck', alpha=.8)

@@ -23,6 +23,7 @@ def get_roc_auc(y_true,y_pred_prob):
 def printConfusionMatrix(cm):
     """
     format the cm string before plot it to ROC curve
+    calculate and show FPR and TPR value for label=1 class
 
     :param cm: confusion matrix    the value of cm[i,j] is the number that a trueclass i is predicted to be class j
                           predict=0  predict=1 .... predict=n_class
@@ -30,9 +31,11 @@ def printConfusionMatrix(cm):
        truelabel=1
        ...
        truelabel=n_class
+       FPR(1) =    , TPR(1) =
 
     :return: a string of above format
     """
+    N1=0.0     # the total element number of truelabel is not 1
     output="\n               "
     row,col= cm.shape
     for j in range(col):
@@ -42,7 +45,16 @@ def printConfusionMatrix(cm):
         output += "truelabel=%d" %i
         for j in range(col):
             output +="  % 9d" %cm[i][j]
+        if i!=1:
+            N1 = N1+cm[i, :].sum()  # the sum of  truelabel!=1
+        else:   #  i == 1, for those truelabel=1 data, calculate its tpr and fpr
+            FP1=cm[:,i].sum()-cm[i,i]    # for all predict=1 data, minus true positive cm[1,1]
+            TP1=cm[i,i]
+            P1=cm[i,:].sum()   # the sum of the truelabel=1
         output+="\n"
+    FPR1=float(FP1)/N1
+    TPR1=float(TP1)/P1
+    output+="FPR(1)=%0.4f, TPR(1)=%0.4f\n"%(FPR1,TPR1)
     return output
 
 #visualize  the batch features in both a scatter subplot to review the min-max range of the features in a whole picture
@@ -160,8 +172,24 @@ absolute min/max value in one scatter plot
         #     print('Exit plotting features...')
         #     break
 
+def plotAmountOverTransaction(x,amount,title):
+    '''
+
+    :param amount: overall capital at this point
+    :param x: transaction numbers
+    :return:
+    '''
 
 
+    amountFig = plt.figure(title , figsize=(10,8))
+    #amountFig.subplots_adjust(top=0.92, left=0.10, right=0.97, hspace=0.37, wspace=0.3)
+
+    # amf = amountFig.add_subplot(1, 1, 1)  # plot
+
+    plt.plot(x,amount)
+    plt.xlabel("transaction times")
+    plt.ylabel("Investment value compared with initial=1")
+    plt.show()
 
 
 #customized data preprocess function

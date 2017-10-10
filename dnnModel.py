@@ -73,7 +73,7 @@ def evalprint(model, X_predict, y_true, title,
     # the following example sklearn predict_proba function is correct or not ??? ...
     # probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
     plot_tflearn_ROC(y_true, predicted, title, fig, nrow, ncol, plot_number,\
-                     cmstr+ 'Y=1 Percent= {}%'.format("%0.2f"%(100*y_true.mean()))+\
+                     cmstr+ 'truelabel=1 Percentage= {}%'.format("%0.2f"%(100*y_true.mean()))+\
                      '\n'+ 'NullAccuracy= {}%'.format("%0.2f"%(100*nullAccuracy))+\
                      '\n'+'Accuracy={}%'.format("%0.2f"%(100*testAccuracy)), \
                      annotate, drawplot)
@@ -142,7 +142,7 @@ class DnnModel(object):
         net = tflearn.regression(net, optimizer=self.opt, loss='categorical_crossentropy', metric=acc, \
                                  to_one_hot=True, n_classes=2)
 
-        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_22thlogs/", tensorboard_verbose=0)
+        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_26thlogs/", tensorboard_verbose=0)
 
         self.model = model
 
@@ -164,15 +164,20 @@ class DnnModel(object):
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
         net = tflearn.input_data([None, 166], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+        net = tflearn.dropout(net, keep_prob=0.9, noise_shape=None, name='dropoutlayer0')
+
         net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer1')
         net = tflearn.dropout(net,keep_prob=self.keepProb,noise_shape=None,name='dropoutlayer1')
+
         net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer2')
         net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer2')
+
         net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer3')
         net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer3')
+
         net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
                                       regularizer=self.regularization, weight_decay=0.001, name='hidderlayer4')
         net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer4')
@@ -323,7 +328,7 @@ class DnnModel(object):
 
             # evaluate the model with Test data
             testAuc, testTa, testNa = evalprint(self.model, X_test, y_test, "with Test data ", \
-                                                figid, 2, 1, 2, False, True)
+                                                figid, 2, 1, 2, annotate=True, drawplot=True)
 
 
             # update test result  to file
