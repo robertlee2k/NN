@@ -1,7 +1,7 @@
 
 import csv
 import os
-
+import datetime
 
 from utility import log
 supportedOptimizer= ('Adam', 'Momentum', 'RMSProp','SGD')
@@ -77,10 +77,21 @@ class HyperParam(object):
                 if not row['Skip'] in supportedSkip:
                     log('\n Skip column must be left either N/n or Y/y in seq %s' %row['Seqno'])
                     errorFound=True
+                if not os.path.exists(row["Train"]) or not os.path.exists(row['Test']):
+                    log('\n Train file or Test file in seq %s does NOT exist' % row['Seqno'])
+                    errorFound = True
+                # try conversion, if the raw data is in wrong format, the following will generate ValueError exception
+                # time data 'xxxxxx' does not match format '%Y/%m/%d'
+                # which will be captured by except clause
+                stDate = datetime.datetime.strptime(row["TFromDate"], "%Y/%m/%d")
+                toDate =  datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
+                stDate = datetime.datetime.strptime(row["TestFromD"], "%Y/%m/%d")
+                toDate = datetime.datetime.strptime(row["TestToD"], "%Y/%m/%d")
 
 
-                tmp=int(row['Seqno'])+int(row['decaystep'])+int(row['RS'])+int(row['Epoch'])+int(row['Minibatch'])
-                tmp=float(row['Alpha'])+float(row['lrdecay'])+float(row['KeepProb'])
+                tmp=int(row['Seqno'])+int(row['decaystep'])+int(row['RS'])+int(row['Epoch'])+int(row['Minibatch'])\
+                    +int(row["HiddenLayer"])+ int(row['HiddenUnit'])
+                tmp=float(row['Alpha'])+float(row['lrdecay'])+float(row['KeepProb'])+float(row['InputKeepProb'])
             except ValueError as e:
                 log(e.message)
                 log("\nFatal Error: wrong data type in seq %s" %(row['Seqno']))

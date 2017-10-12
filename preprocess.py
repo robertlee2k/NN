@@ -8,6 +8,8 @@ import numpy as np
 #below import are from self written .py
 from utility import log
 
+# the file is used to store/load datapreprocessor that is used before training and predicting
+dataPreprocessDumpfile="dpp.bin"
 #pay special attention to below list. this version includes stockcode as a feature, if you remove stockcode,need readjust
 midNormalizedColumnids = [0,1,42,43,44,45,46,47,68,69,70,71,72,73,74,75,76,77,78,79,80,81,\
                           82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,108,109,110,111,112,113,114,115,116,117,138,139,140,141,142,\

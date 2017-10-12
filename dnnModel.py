@@ -99,9 +99,11 @@ class DnnModel(object):
     def __init__(self, hpDict, runid):
         self.startTime = time.time()  # start time in ms.
         self.st = time.ctime()  # start time in date/time format
-        log('\n %s ----> After applying %s preprocessor %s,regularization=%s,keep_prob=%s building the DNN Model\
-            (rs=%s,alpha=%s,decayrate=%s,decaystep=%s) for %s epoches with mini_batch size of %s in progress ... time:%s' \
-            % (hpDict['Seqno'], hpDict['Preprocessor'], hpDict['Optimizer'],hpDict['Regularization'],hpDict['KeepProb'],
+        log('\n %s : After applying %s preprocessor %s,regularization=%s,hiddenLayer=%s,hiddenUnit=%s,inputKeepProb=%s,\
+            keep_prob=%s building the DNN Model(rs=%s,alpha=%s,decayrate=%s,decaystep=%s) for %s epoches with mini_batch size of %s in progress ... time:%s'
+            % (hpDict['Seqno'], hpDict['Preprocessor'], hpDict['Optimizer'],hpDict['Regularization'],hpDict['HiddenLayer'],
+               hpDict['HiddenUnit'],hpDict['InputKeepProb'],
+               hpDict['KeepProb'],
                hpDict['RS'], hpDict['Alpha'], hpDict['lrdecay'],
                hpDict['decaystep'], hpDict['Epoch'], hpDict['Minibatch'],
                time.ctime()))
@@ -113,6 +115,10 @@ class DnnModel(object):
         self.epoch = int(hpDict['Epoch'])
         self.learningrate = float(hpDict['Alpha'])
         self.keepProb= float(hpDict['KeepProb'])
+        self.hiddenLayer=int(hpDict['HiddenLayer'])
+        self.hiddenUnit=int(hpDict['HiddenUnit'])
+        self.inputKeepProb=float(hpDict['InputKeepProb'])
+        self.dpp=None
 
         assert hpDict['Regularization'] in supportedRegularization
 
@@ -142,16 +148,13 @@ class DnnModel(object):
         net = tflearn.regression(net, optimizer=self.opt, loss='categorical_crossentropy', metric=acc, \
                                  to_one_hot=True, n_classes=2)
 
-        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_26thlogs/", tensorboard_verbose=0)
+        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_27thlogs/", tensorboard_verbose=0)
 
         self.model = model
 
     def make_core_network(self):
-        # train a 4-hidden layer neural network with 150 nodes in each layer
-        # self.g=tf.Graph()
-        # with self.g.as_default():
-        # dpp= tflearn.data_preprocessing.DataPreprocessing(name="dataPreprocess")
-        # dpp.add_custom_preprocessing(myNormalizer) #Mean: 3163.05 (To avoid repetitive computation, add it to argument 'mean' of `add_featurewise_zero_center`)
+        # train a self.hiddenLayer layer neural network with self.hiddenUnit nodes in each layer
+
         rng = np.random.RandomState(self.rs)
         seedweight = rng.uniform(0.001, 1)
         log('seedweight=%0.4f' % seedweight)
@@ -164,36 +167,13 @@ class DnnModel(object):
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
         net = tflearn.input_data([None, 166], data_preprocessing=None, data_augmentation=None, name="inputlayer")
-        net = tflearn.dropout(net, keep_prob=0.9, noise_shape=None, name='dropoutlayer0')
+        net = tflearn.dropout(net, keep_prob=self.inputKeepProb, noise_shape=None, name='dropoutlayer0')
 
-        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                                      regularizer=self.regularization, weight_decay=0.001, name='hidderlayer1')
-        net = tflearn.dropout(net,keep_prob=self.keepProb,noise_shape=None,name='dropoutlayer1')
+        for l in range(self.hiddenLayer):
+            net = tflearn.fully_connected(net, self.hiddenUnit, activation='relu', weights_init=xavierInit, bias_init=normalInit,
+                                      regularizer=self.regularization, weight_decay=0.001, name='hidderlayer%02d'%(l+1))
+            net = tflearn.dropout(net,keep_prob=self.keepProb,noise_shape=None,name='dropoutlayer%02d'%(l+1))
 
-        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                                      regularizer=self.regularization, weight_decay=0.001, name='hidderlayer2')
-        net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer2')
-
-        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                                      regularizer=self.regularization, weight_decay=0.001, name='hidderlayer3')
-        net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer3')
-
-        net = tflearn.fully_connected(net, 250, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-                                      regularizer=self.regularization, weight_decay=0.001, name='hidderlayer4')
-        net = tflearn.dropout(net,keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer4')
-        # net = tflearn.fully_connected(net, 100,  activation='relu',weights_init=xavierInit, bias_init=normalInit,
-        #                               regularizer=self.regularization, weight_decay=0.001,name='hidderlayer5')
-
-        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer6')
-        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer7')
-        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer8')
-        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer9')
-        # net = tflearn.fully_connected(net, 100, activation='relu', weights_init=xavierInit, bias_init=normalInit,
-        #                               regularizer=self.regularization, weight_decay=0.001, name='hidderlayer10')
 
 
 
@@ -249,16 +229,19 @@ class DnnModel(object):
     # log(h4layer_var[0])
 
     # model.get_weights(net.W)
-    def saveModel(self, hpDict):
+    def saveModel(self, hpDict,dp,dppfilename):
         '''
-        generate a descriptive name for the model and save the trained model to disk
-        :param hpDict: including all the required hyper parameters of this model
+        generate a descriptive name for the model and save the trained model and dp to disk with the name of dppfilename
+        in the same folder
+        :param hpDict: including all the required hyper parameters of this model,
+                dp: datapreprocess instance which includes datascaler.
         :return: None
         '''
         self.modelfilename = "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
                         % (hpDict['Preprocessor'], self.runid, self.opt.name,
                            self.learningrate, self.lrdecay,self.decaystep,
                            self.epoch,self.minibatch)
+
         # save the model to disk
         fullpath = ''.join((EXPORT_DIR, self.runid))
         if os.path.isfile(fullpath):
@@ -272,11 +255,17 @@ class DnnModel(object):
             fullpath = ''.join((EXPORT_DIR, self.runid, '/', self.modelfilename))
             log('\ntraining completed, folder exists, overwrite it with new model as %s' % fullpath)
             self.model.save(fullpath)
+        #save the dataprocessor to disk
+        fullpath =''.join((EXPORT_DIR,self.runid,'/',dppfilename))
+        import pickle
+        with  open(fullpath,'wb') as f:
+            pickle.dump(dp,f)
 
-    def loadModel(self,hpDict,name):
+    def loadModel(self,hpDict,name,dppfilename):
         '''
-        load weight from a previous trained model from disk
-        :param name: unique ame can be used to retrieve the model's filename from disk
+        load weight from a previous trained model from disk,
+        load dataprocessor from a previous trained model at the same folder
+        :param name: unique name can be used to retrieve the model's filename from disk
         :return: model
         '''
 
@@ -295,9 +284,113 @@ class DnnModel(object):
         else:
             raise IOError("model file %s doesn't exist, horrible, check the naming rule of saving/loading model" %modelfullname)
 
+        dppfullpath= ''.join( (EXPORT_DIR,name,'/',dppfilename))
+        if os.path.exists(dppfullpath):
+            log('load previous preprocess datascaler:%s' %dppfullpath)
+            import pickle
+            with open (dppfullpath,'rb') as f:
+                self.dpp=pickle.load(f)
+
+    def extractTrainTestFileDesc(self,hpDict):
+        '''
+        extract a descriptive name from  hpDict
+        :return:
+        string of Train
+        '''
+        pass
+
+    def evaluateTestSet(self,hpDict,X_test,y_test):
+        '''
+        1.evaluate the model using the test data only
+        2.generate auc,accuracy etc
+        3. generate and plot ROC and save the plt file
+        4. append the test result to csv file
+        :param hpDict:
+        :param X_test:
+        :param y_test:
+        :return:
+        '''
+        log("Evaluate the trained model with test data only,save its plot")
+
+        try:
+            figTitle = "Runid_%s_%s_%s_epoch%d_minibatch%d" % (self.runid, hpDict['Preprocessor'], self.opt.name,
+                                                               self.epoch, self.minibatch)
+            figid = plt.figure(figTitle, figsize=(10, 8))
+            figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
 
 
+            # evaluate the model with Test data
+            testAuc, testTa, testNa = evalprint(self.model, X_test, y_test, "with Test data (Runid=%s)"%self.runid,
+                                                figid, 1, 1, 1, annotate=True, drawplot=True)
 
+            # update test result  to file
+
+            plotName = "%s_%s_alpha%0.4f_epoch%d_%d.png" \
+                       % (hpDict['Preprocessor'], self.opt.name, self.learningrate,
+                          self.epoch, self.minibatch)
+            fullpath = ''.join((EXPORT_DIR, self.runid))
+            if os.path.isfile(fullpath):
+                log("file %s exists, do not overwrite it!!!!" % fullpath)
+            elif os.path.isdir(fullpath) == False:
+                os.mkdir(fullpath)
+            fullpath = ''.join((EXPORT_DIR, self.runid, '/', plotName))
+            plt.savefig(fullpath, figsize=(10, 8))  # if the file exists, overwrite it
+
+            # model.trainer.training_state.val_loss, \
+            # model.trainer.training_state.val_acc,\
+
+            # calculate the duration of building/training/evaluate the model
+            endTime = time.time()  # end time in ms.
+            elapseTime = (endTime - self.startTime)
+            hour = int(elapseTime / 3600)
+            minute = int((elapseTime % 3600) / 60)
+            second = int((elapseTime % 3600) % 60)
+            duration = "%dh%d'%d''" % (hour, minute, second)
+
+            log("\nthe time of building/training/evaluating the model is %s" % (duration))
+
+            # update test result  to file according to above column sequence training auc,loss, training accuracy are NA
+            result = [hpDict['Seqno'], self.runid, hpDict['Preprocessor'], self.opt.name,
+                      self.regularization,
+                      "%02d" % self.hiddenLayer,
+                      "%d" % self.hiddenUnit,
+                      "%0.2f" % self.inputKeepProb,
+                      "%0.2f" % self.keepProb,
+                      "%0.4f" % self.learningrate,
+                      "%0.4f" % self.lrdecay,
+                      "%0.4f" % self.decaystep,
+                      "%d" % self.rs,
+                      "NA",
+                      "NA",
+                      "NA",
+                      "%0.4f" % testAuc,
+                      "%0.2f" % (testTa * 100) + '%',
+                      "%0.2f" % (testNa * 100) + '%',
+                      duration,
+                      "%s" % (self.st),
+                      "%s" % (time.ctime()), str(self.epoch), str(self.minibatch), fullpath,
+                      "NA", 'NA','NA',
+                      hpDict["Test"], hpDict['TestFromD'], hpDict['TestToD']]
+
+            trackRecord = TestResult(testResultfile)
+
+            trackRecord.append(result)
+
+            # plt.show()  # display the ROC plot onscreen, if plot ROC is not needed, you must comment this line out!!!
+            plt.close(figid)  # close it to release memory
+        except Exception as e1:
+            print ('=' * 30 + "exception happened:" + '=' * 30)
+            print(Exception)
+            print(e1)
+            print ('=' * 30 + "end of print exception" + '=' * 30)
+
+        endTime = time.time()  # end time in ms.
+        elapseTime = (endTime - self.startTime)
+        hour = int(elapseTime / 3600)
+        minute = int((elapseTime % 3600) / 60)
+        second = int((elapseTime % 3600) % 60)
+        duration = "%dh%d'%d''" % (hour, minute, second)
+        log("\nmodel building/training/evaluation completed,duration is %s" % (duration))
 
     def evaluate(self,hpDict,X,y,X_test,y_test):
         '''
@@ -316,24 +409,24 @@ class DnnModel(object):
         # Serial   number  of failed request:  1505
         #   Current   serial  number in output  stream:  1507
         try:
-            figid = plt.figure("ROC 2011-16Train201709Test Runid(%s) %s_%s_epoch%d_minibatch%d"
-                               % (self.runid, hpDict['Preprocessor'], self.opt.name,
-                                  self.epoch, self.minibatch), figsize=(10, 8))
+            figTitle= "Runid_%s_%s_%s_epoch%d_minibatch%d" %(self.runid, hpDict['Preprocessor'], self.opt.name,
+                                  self.epoch, self.minibatch)
+            figid = plt.figure(figTitle, figsize=(10, 8))
             figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
 
             # evaluate the model with Training data
-            trainAuc, trainTa, trainNa = evalprint(self.model, X, y, "with Training data,training loss=%0.4f" \
-                                                   % (self.model.trainer.training_state.global_loss), \
+            trainAuc, trainTa, trainNa = evalprint(self.model, X, y, "with Training data(Runid=%s),training loss=%0.4f" \
+                                                   % (self.runid,self.model.trainer.training_state.global_loss),
                                                    figid, 2, 1, 1, False, True)
 
             # evaluate the model with Test data
-            testAuc, testTa, testNa = evalprint(self.model, X_test, y_test, "with Test data ", \
+            testAuc, testTa, testNa = evalprint(self.model, X_test, y_test, "with Test data ",
                                                 figid, 2, 1, 2, annotate=True, drawplot=True)
 
 
             # update test result  to file
 
-            plotName = "ROC2011-16Train_201709Test%s_%s_alpha%0.4f_epoch%d_%d.png" \
+            plotName = "%s_%s_alpha%0.4f_epoch%d_%d.png" \
                        % (hpDict['Preprocessor'], self.opt.name, self.learningrate,
                           self.epoch, self.minibatch)
             fullpath = ''.join((EXPORT_DIR, self.runid))
@@ -342,7 +435,7 @@ class DnnModel(object):
             elif os.path.isdir(fullpath) == False:
                 os.mkdir(fullpath)
             fullpath = ''.join((EXPORT_DIR, self.runid, '/', plotName))
-            plt.savefig(fullpath, figsize=(10, 8))
+            plt.savefig(fullpath, figsize=(10, 8))      #if the file exists, overwrite it
 
             # model.trainer.training_state.val_loss, \
             # model.trainer.training_state.val_acc,\
@@ -360,6 +453,9 @@ class DnnModel(object):
             # update test result  to file according to above column sequence
             result = [hpDict['Seqno'],self.runid, hpDict['Preprocessor'], self.opt.name,
                       self.regularization,
+                      "%02d" %self.hiddenLayer,
+                      "%d" % self.hiddenUnit,
+                      "%0.2f" % self.inputKeepProb,
                       "%0.2f" % self.keepProb,
                       "%0.4f" % self.learningrate,
                       "%0.4f" % self.lrdecay,
@@ -369,10 +465,13 @@ class DnnModel(object):
                       "%0.4f" % self.model.trainer.training_state.global_loss,
                       "%0.2f" % (trainTa*100) + '%',
                       "%0.4f" % testAuc,
-                      "%0.2f" % (testTa*100) + '%',\
+                      "%0.2f" % (testTa*100) + '%',
                       "%0.2f" % (testNa * 100) + '%',
-                      duration, "%s" % (self.st), "%s" \
-                      % (time.ctime()), str(self.epoch), str(self.minibatch), fullpath]
+                      duration,
+                      "%s" % (self.st),
+                      "%s"% (time.ctime()), str(self.epoch), str(self.minibatch), fullpath,
+                      hpDict["Train"],hpDict["TFromDate"],hpDict["TToDate"],
+                      hpDict["Test"],hpDict['TestFromD'],hpDict['TestToD']]
 
             trackRecord = TestResult(testResultfile)
 

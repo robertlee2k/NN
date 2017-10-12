@@ -4,6 +4,13 @@ import sys, getopt,os,csv
 
 #testResultfile="DNN_Training_results.csv"
 paramfile = "HyperParamSearchPlan.csv"
+trainfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201101-201612).csv"   #training data file
+testfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201701-201709).csv"  # test data  file
+
+tFromDate="2011/01/01"
+tToDate='2016/12/30'
+testFromD='2016/12/30'
+testToD='2017/09/19'
 
 def usage():
     print ('genParam -o [output.csv]')
@@ -12,9 +19,11 @@ def usage():
 
 class GenFile(object):
     def __init__(self,filename):
-        self.columnsname = ["Seqno","Preprocessor", "Optimizer", "Regularization","KeepProb",
+        self.columnsname = ["Seqno","Preprocessor", "Optimizer", "Regularization",'HiddenLayer','HiddenUnit',"InputKeepProb","KeepProb",
                             "Alpha", "lrdecay", "decaystep", "RS",
-                            "Epoch", "Minibatch","Skip"]
+                            "Epoch", "Minibatch","Skip",
+                            "Train","TFromDate","TToDate",
+                            "Test","TestFromD","TestToD"]
         self.filename = filename
         if os.path.exists(filename) == False:
             with open(filename, 'w') as csv_file:
@@ -28,19 +37,25 @@ class GenFile(object):
                 writer.writerow(rows)
     def generate(self):  #self define logic here
         seqno=0
+        hiddenLayer=4
+        #hiddenUnit=1000
+        inputKeepProb=0.9
+        minibatch=16384
         for preprocessor in ['Standard']:
             for opt in ['Adam']:
-                for regularization in ['None', 'L2','L1']:
+                for regularization in ['None','L2']:
                     for alpha in [0.001]:
                         for lrdecay in [0.99]:
                             for decaystep in [100]:
                                 for epoch in [1000]:
-                                    for minibatch in [16384]:
+                                    for hiddenUnit in [1000,500]:
                                         for rs in [39987]:
-                                            for keepProb in [0.1,0.2,0.4,0.6,0.8,0.9]:
+                                            for keepProb in [0.2,0.4,0.6,0.8,0.9]:
 
-                                                row = ['%d'%seqno,preprocessor,opt,regularization,keepProb,alpha,lrdecay,
-                                                   decaystep,rs,epoch,minibatch,'N']
+                                                row = ['%d'%seqno,preprocessor,opt,regularization,hiddenLayer,hiddenUnit,inputKeepProb,keepProb,alpha,lrdecay,
+                                                   decaystep,rs,epoch,minibatch,'N',
+                                                   trainfilename,tFromDate,tToDate,
+                                                   testfilename,testFromD,testToD]
                                                 self.append(row)
                                                 seqno += 1
         print ('\n%s is generated' %self.filename)
