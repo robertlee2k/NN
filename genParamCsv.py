@@ -4,8 +4,8 @@ import sys, getopt,os,csv
 
 #testResultfile="DNN_Training_results.csv"
 paramfile = "HyperParamSearchPlan.csv"
-trainfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201101-201612).csv"   #training data file
-testfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201701-201709).csv"  # test data  file
+# trainfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201101-201612).csv"   #training data file
+# testfilename = "/home/topleaf/stock/tensorFlowData/tensorFlowData(201701-201709).csv"  # test data  file
 
 tFromDate="2011/01/01"
 tToDate='2016/12/30'
@@ -22,8 +22,8 @@ class GenFile(object):
         self.columnsname = ["Seqno","Preprocessor", "Optimizer", "Regularization",'HiddenLayer','HiddenUnit',"InputKeepProb","KeepProb",
                             "Alpha", "lrdecay", "decaystep", "RS",
                             "Epoch", "Minibatch","Skip",
-                            "Train","TFromDate","TToDate",
-                            "Test","TestFromD","TestToD"]
+                            "TFromDate","TToDate",
+                            "TestFromD","TestToD"]
         self.filename = filename
         if os.path.exists(filename) == False:
             with open(filename, 'w') as csv_file:
@@ -36,7 +36,7 @@ class GenFile(object):
                 writer = csv.writer(csv_file)
                 writer.writerow(rows)
     def generate(self):  #self define logic here
-        seqno=0
+        seqno = 0
         hiddenLayer=4
         #hiddenUnit=1000
         inputKeepProb=0.9
@@ -54,8 +54,8 @@ class GenFile(object):
 
                                                 row = ['%d'%seqno,preprocessor,opt,regularization,hiddenLayer,hiddenUnit,inputKeepProb,keepProb,alpha,lrdecay,
                                                    decaystep,rs,epoch,minibatch,'N',
-                                                   trainfilename,tFromDate,tToDate,
-                                                   testfilename,testFromD,testToD]
+                                                   tFromDate,tToDate,
+                                                   testFromD,testToD]
                                                 self.append(row)
                                                 seqno += 1
         print ('\n%s is generated' %self.filename)

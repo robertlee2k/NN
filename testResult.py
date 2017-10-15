@@ -14,28 +14,30 @@ class TestResult(object):
 
     # use the code to generate only one instance of the class
     def __new__(cls, *args, **kwargs):  # this method is called before __init__()
-        if TestResult.__instance == None:
+        if TestResult.__instance is None:
             TestResult.__instance = object.__new__(cls, *args, **kwargs)
         return TestResult.__instance
 
     def __init__(self,filename):
-        self.columnsname=["Seqno","RunId","PreProcessor","Optimizer","Regularization",'HiddenLayer','HiddenUnit',"InputKeepProb",\
+        self.columnsname = ["Seqno","RunId","PreProcessor","Optimizer","Regularization",
+                          'HiddenLayer','HiddenUnit',"InputKeepProb",
                           'KeepProb',"Alpha","lrdecay","decaystep","RS",
                           "AUC(Train)","Loss(Train)","Accuracy(Train)",
                           "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",\
-                          "Duration","StartTime","EndTime","Epoch","Minibatch","ROC Curve Location",
-                          "Train", "TFromDate", "TToDate",
-                          "Test", 'TestFromD', 'TestToD']
+                          "Duration","StartTime","EndTime","Epoch","Minibatch","Model Location",
+                          "TFromDate", "TToDate",
+                          'TestFromD', 'TestToD']
 
-        self.filename=filename
-        if os.path.exists(filename)==False :
-            with open(filename,'w') as csv_file:
-                writer=csv.writer(csv_file)
+        self.filename = filename
+        if not os.path.exists(filename):
+            with open(filename, 'w') as csv_file:
+                writer = csv.writer(csv_file)
                 writer.writerow(self.columnsname)
-    def append(self,rows):
+
+    def append(self, rows):
         if os.path.exists(self.filename):
-            with open(self.filename,'ab+') as csv_file:
-                writer=csv.writer(csv_file)
+            with open(self.filename, 'ab+') as csv_file:
+                writer = csv.writer(csv_file)
                 writer.writerow(rows)
                 log("\nUpdated TestResult record")
 

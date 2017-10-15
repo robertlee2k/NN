@@ -1,8 +1,21 @@
 
+DATAFILEPATH="/home/topleaf/stock/tensorFlowData/"
+DATAFILELIST=["tensorFlowData(200501-201012).csv", "tensorFlowData(201101-201612).csv",
+              "tensorFlowData(201701-201709).csv"]
+
+TRAINDATASTART = 1      # the row# of the beginning of training data
+TRAINDATASTOP = 1132174  # the row# of the end of the training data record  2013-2015csv file
+DATASTART = 1     # the row# of the starting in test csv file 2016-2017
+DATASTOP = 1500000  # 1132174  # the last row of the whole file, this row# is excluded in test data
+
+TrainDataStart = 1
+TrainDataStop = DATASTOP  # for debugging purpose ,you can adjust this to get a small part for time saving now
+TestDataStart = 1
+TestDataStop = DATASTOP     # for debugging purpose ,you can adjust this to get a small part for time saving now
 
 # the following definition specified the column id# in original csv data file,starting from 0
 DataDateColumn = 4
-SelectedAvglineColumn=6
+SelectedAvglineColumn = 6
 
 from tensorflow.python.platform import gfile
 import datetime
@@ -13,9 +26,7 @@ import numpy as np
 #the following packages  are part of the project
 from hyperParam import selectedAvgline
 from utility import log
-Dataset = collections.namedtuple('Dataset',['data','target','featurenames'])
-
-
+Dataset = collections.namedtuple('Dataset', ['data', 'target', 'featurenames'])
 
 
 def load_csv_calc_profit(filename,
@@ -76,34 +87,64 @@ def load_csv_calc_profit(filename,
         plotAmountOverTransaction(x,amount,filename+" Selected Avgline="+selectedAvgline.__str__())
 
 
-
 class FetchData(object):
-    __instance = None       #define instance of the class
+    """
+    this class handle data file fetch,
+    its load method returns  rawdata in Dataset format
+    input: fromDate, toDate
+    internal
 
-    #use the code to generate only one instance of the class
+    """
+    __instance = None       # define instance of the class
+
+    # use the code to generate only one instance of the class
     def __new__(cls, *args, **kwargs):    # this method is called before __init__() only if the class is inherited from object
-        if FetchData.__instance == None:
+        if FetchData.__instance is None:
             FetchData.__instance = object.__new__(cls, *args, **kwargs)
         return FetchData.__instance
 
-    def __init__(self,dataFilename,fromDate,toDate,startRow,endRow):
-        self.filename=dataFilename
-        self.fromDate=fromDate
-        self.toDate=toDate
-        self.startRow=startRow
-        self.endRow=endRow
+    def __init__(self):
+        self.datafilename = None
+        pass
 
 
-    def loadData(self):
+    # ugly implementation to get datafilename according to fromDate and toDate
+    # to be improved later
+    def __getDatafileFullpath(self,fromDate,toDate):
+        stDate = datetime.datetime.strptime(fromDate, "%Y/%m/%d")
+        endDate = datetime.datetime.strptime(toDate, "%Y/%m/%d")
+        if stDate >= datetime.datetime.strptime("2005/01/01","%Y/%m/%d") and \
+            endDate <= datetime.datetime.strptime("2010/12/31","%Y/%m/%d"):
+            self.datafilename= ''.join((DATAFILEPATH,DATAFILELIST[0]))
+        elif stDate >= datetime.datetime.strptime("2011/01/01","%Y/%m/%d") and \
+            endDate <= datetime.datetime.strptime("2016/12/31","%Y/%m/%d"):
+            self.datafilename= ''.join((DATAFILEPATH,DATAFILELIST[1]))
+        elif stDate >= datetime.datetime.strptime("2017/01/01","%Y/%m/%d") and \
+            endDate <= datetime.datetime.strptime("2017/09/30","%Y/%m/%d"):
+            self.datafilename = ''.join((DATAFILEPATH,DATAFILELIST[2]))
+        else:
+            raise ValueError("failed to locate datafilename")
+
+    def loadData(self, fromDate, toDate):
+        """
+        this method handle loading data from files to memory in datasets format and return it
+        the logic of which columns , rows, dates are loaded can be customized in this method.
+        :param fromDate:
+        :param toDate:
+        :return: Dataset format structure in memory
+        """
+        # Load datasets. discard column 0,1,3,4 in the original csvfile ,which represent  id ,tradedate,mc_date,datadate
+
         try:
+            self.__getDatafileFullpath(fromDate, toDate)
             rawData = self.load_partcsv_without_header(
-                filename=self.filename,
+                filename=self.datafilename,
                 target_dtype=np.int,
                 features_dtype=np.float32,
-                start_rowid=self.startRow,
-                end_rowid=self.endRow,
-                fromDate=self.fromDate,
-                toDate=self.toDate,
+                start_rowid = DATASTART,
+                end_rowid = DATASTOP,
+                fromDate = fromDate,
+                toDate = toDate,
                 discard_colids=[0, 1, 3, 4, -1],
                 # add -1 in the last column to exclude the percentage infor,include 2# stockcode,
                 target_column=5,
