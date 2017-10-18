@@ -23,11 +23,12 @@ class TestResult(object):
                           'HiddenLayer','HiddenUnit',"InputKeepProb",
                           'KeepProb',"Alpha","lrdecay","decaystep","RS",
                           "AUC(Train)","Loss(Train)","Accuracy(Train)",
-                          "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",\
-                          "Duration","StartTime","EndTime","Epoch","Minibatch","Model Location",
+                          "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",
+                          "Duration","StartTime","EndTime","Epoch","Minibatch",
+                          "Model Location",
                           "TFromDate", "TToDate",
                           'TestFromD', 'TestToD']
-
+        self.rows = []
         self.filename = filename
         if not os.path.exists(filename):
             with open(filename, 'w') as csv_file:
@@ -40,4 +41,16 @@ class TestResult(object):
                 writer = csv.writer(csv_file)
                 writer.writerow(rows)
                 log("\nUpdated TestResult record")
+
+    def readRows(self):
+        if os.path.exists(self.filename):
+            with open(self.filename, 'r') as csv_file:
+                resultfile = csv.DictReader(csv_file)
+                self.rows = [row for row in resultfile]
+        else:
+            raise ValueError("\n Test result file %s doesn't exist" % self.filename)
+
+    def sanitycheck(self):
+        # to be filled , check all the fields are valid otherwise,raise error and exit
+        pass
 

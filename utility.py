@@ -8,6 +8,20 @@ import matplotlib.pyplot as plt
 
 logfilename = "/tmp/stockNN2.log"
 
+def duration(startTime):
+    """
+    calculation passed time from startTime
+    :param startTime: a time of time.time() in ms
+    :return: str format of elapsed time
+    """
+    endTime = time.time()  # end time in ms.
+    elapseTime = (endTime - startTime)
+    hour = int(elapseTime / 3600)
+    minute = int((elapseTime % 3600) / 60)
+    second = int((elapseTime % 3600) % 60)
+    passedTime = "%dh%d'%d''" % (hour, minute, second)
+    return passedTime
+
 #write info to log file
 def log(info,logfilename=logfilename):
     with gfile.Open(logfilename,'a+') as logfileid:

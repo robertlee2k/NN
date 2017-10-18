@@ -4,6 +4,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import datetime
 
 from testResult import TestResult
 from utility import log, get_roc_auc, printConfusionMatrix
@@ -15,7 +16,8 @@ EXPORT_DIR = "/home/topleaf/stock/savedModel/"  # export dir base
 # the file is used to store/load datapreprocessor that is used before training and predicting
 dppfilename = 'dpp.bin'     # default datapreprocess filename to hold DataPreprocess class dump
 hyperparamfilename = 'hyperParam.bin'  # default filename to hold hpDict
-testResultfile = "DNN_Training_results.csv"
+testResultfile = "DNN_Training_results.csv"  # file to record model training results
+# evalRecordfile = "DNN_ModelEval_results.csv"  # file to record model performance over test sets
 
 
 def evalprint(model, X_predict, y_true, title,
@@ -85,22 +87,26 @@ class ModelStore(object):
     __instance = None  # define instance of the class
 
     # use the code to generate only one instance of the class
+    #re think about this , do i need more instance of ModelStore ??  when training and eval run at the same time,
+    #what consequence will happen ?
     def __new__(cls, *args, **kwargs):  # this method is called before __init()__
         if ModelStore.__instance is None:
             ModelStore.__instance = object.__new__(cls, *args, **kwargs)
         return ModelStore.__instance
 
     def __init__(self):
-        self.dirname = None        # the folder name to be used to save the model to disk
+        self.dirname = None    # the folder name to be used to save the model to disk
+        self.matchedModelLocations = None
         self.testRecordName = testResultfile
-        self.modelfilename = None
+        # self.evalRecordName = evalRecordfile
+        self.modelfilename = 'trainedModel'
         self.dpp = None
         self.hpDict = None
         self.loadmymodel = None
-        self.trainAuc = 0.0
-        self.testAuc = 0.0
-        self.testTa = 0.0
-        self.trainTa = 0.0
+        self.trainAuc = None
+        self.testAuc = None
+        self.testTa = None
+        self.trainTa = None
         self.trainNa = None
         self.testNa = None
 
@@ -120,8 +126,6 @@ class ModelStore(object):
         # think about an unique name to identify this model, here I use runid as the folder name
         # since it's unique
         #
-
-        self.modelfilename = 'trainedModel'
 
             # "2011-16%s%s_%s_alpha%0.4f_lrdecay_%0.3f_decaystep%d_epoch%d_batch%d_TrainedModel" \
             #             % (hpDict['Preprocessor'], self.runid, self.opt.name,
@@ -158,37 +162,54 @@ class ModelStore(object):
         with open(fullpath, 'wb') as f:
             pickle.dump(hpDict, f)
 
-    def _getModelFullpath(self, fromDate, toDate):
+    def getModelFullpath(self, fromDate, toDate, minAuc='0.55'):
         """
         get the unique Runid,compose the fullpathname
         :param fromDate:
         :param toDate:
-        :return: a string that contains the fullpath of the model
+        :param minAuc: minimum Auc
+        :return: a list that contains the fullpath of all matched models
         """
-        # search a lookup table, DNN_Training_result, using 2 parameters: fromDate,toDate
-        # to locate its unique location in disk
+        # search a lookup table, DNN_Training_result, using 3 parameters: fromDate,toDate
+        # and minAuc to locate its unique location in disk
+        # open the csv file to search , if found, return the location, otherwise,return None
+        lookupTable = TestResult(self.testRecordName)
+        try:
+            lookupTable.readRows()
+        except ValueError as ve:        # file doesn't exist
+            log(ve.message)
+            raise ValueError(ve.message)  # throw out the exception for caller to handle
+        self.matchedModelLocations = []
+        start = datetime.datetime.strptime(fromDate, "%Y/%m/%d")
+        end = datetime.datetime.strptime(toDate, "%Y/%m/%d")
+        for row in lookupTable.rows:
+            stDate = datetime.datetime.strptime(row["TFromDate"], "%Y/%m/%d")
+            toDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
 
-        # test code to be changed
-        modelfilename = fromDate + '_' + toDate + '_TrainedModel'
-        runid = '7U7TJ7'
-        modelfullname = ''.join((EXPORT_DIR, runid, '/', modelfilename))
-        return modelfullname
+            if start == stDate and end == toDate:  # found a matched training from/to date
+                if float(row['AUC(Test)']) >= float(minAuc):
+                    self.matchedModelLocations.append(row['Model Location'])
 
-    def load(self, fromDate, toDate):
+        # remove duplicate
+        self.matchedModelLocations = list(set(self.matchedModelLocations))
+
+        return self.matchedModelLocations
+
+    def load(self, dirname):
         """
-        load a previous trained model according to given fromDate and toDate
+        load a previous trained model according to given dirname
 
         load weight from a previous trained model from disk,
         load dataprocessor from a previous trained model at the same folder
-        :param fromDate: in format such as fromDate='2016/12/30',
-        :param toDate:  in format as  toDate='2017/09/19',
-        :return: modelinst
+        :param dirname: the dir name of the model to be loaded
+        :return: a modelinst that loaded the trained model from dirname folder
         """
-        modelfullname = self._getModelFullpath(fromDate, toDate)
 
-        dirname = os.path.dirname(modelfullname)
-        dppfullpath = ''.join((EXPORT_DIR, dirname, '/', dppfilename))
-        hpfullpath = ''.join((EXPORT_DIR, dirname, '/', hyperparamfilename))
+        self.dirname = dirname
+
+        dppfullpath = ''.join((self.dirname, '/', dppfilename))
+        hpfullpath = ''.join((self.dirname, '/', hyperparamfilename))
+        modelfullname = ''.join((self.dirname, '/', self.modelfilename))
         try:
             # load its preprocess  datascaler
             if os.path.exists(dppfullpath):
@@ -211,10 +232,9 @@ class ModelStore(object):
             if os.path.exists(modelfullname+'.meta'):
                 log('load previous trained model:%s' % modelfullname)
                 tf.reset_default_graph()
-                # use this fake runId distinguish load models from original model, don't retrain the model
-                self.loadmymodel = DnnModel(self.hpDict, 'load')
-                self.loadmymodel.load(modelfullname, weights_only=True)
-
+                self.loadmymodel = DnnModel(self.hpDict)
+                self.loadmymodel.model.load(modelfullname, weights_only=True)
+                self.loadmymodel.runid = os.path.basename(self.dirname)
             else:
                 raise IOError("model file %s doesn't exist, horrible, "
                       "check the naming rule of saving/loading model" % modelfullname)
@@ -222,9 +242,12 @@ class ModelStore(object):
         except IOError as ve:  # can't find the trained model from disk
                         log(ve.message)
                         log("\nWARNING:  Skip this loading process ... ")
-        except Exception:    # any other exceptions, just skip this evaluation, not a big deal
-                        log("\nWARNING:  Exception occurred, skip this evaluation... ")
-        return self.loadmymodel
+                        raise IOError(ve.message)
+        except Exception as e:    # any other exceptions, just skip this evaluation, not a big deal
+                        log("\nWARNING:  the following Exception occurred, skip this loading... ")
+                        log(e.message)
+                        raise Exception(e.message)
+        return self
 
     def evaluate(self, seqid, modelinst, dp, X, y, X_test, y_test):
         """
@@ -280,6 +303,7 @@ class ModelStore(object):
             print(Exception)
             print(e1)
             print ('=' * 30 + "end of print exception" + '=' * 30)
+            raise Exception
 
     def writeResult(self, seqid, hpDict, modelinst, st, endt, duration):
         """
@@ -294,11 +318,36 @@ class ModelStore(object):
         """
         assert (isinstance(modelinst, DnnModel))
         if self.dirname is None:
-            log("the model has NOT been saved to disk, call save method in class %s before "
+            log("the model has NOT been saved to disk/load from disk, call save method in class %s before "
                 % self.__class__.__name__)
-            self.dirname = "None saved"
-
-        result = [seqid, modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
+            raise ValueError("self.dirname is None")
+        if (self.trainAuc is not None) and (self.trainTa is not None ) \
+            and (self.trainNa is not None):
+            result = [seqid, modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
+                      modelinst.regularization,
+                      "%02d" % modelinst.hiddenLayer,
+                      "%d" % modelinst.hiddenUnit,
+                      "%0.2f" % modelinst.inputKeepProb,
+                      "%0.2f" % modelinst.keepProb,
+                      "%0.4f" % modelinst.learningrate,
+                      "%0.4f" % modelinst.lrdecay,
+                      "%0.4f" % modelinst.decaystep,
+                      "%d" % modelinst.rs,
+                      "%0.4f" % self.trainAuc,
+                      "%0.4f" % modelinst.model.trainer.training_state.global_loss,
+                      "%0.2f" % (self.trainTa * 100) + '%',
+                      "%0.4f" % self.testAuc,
+                      "%0.2f" % (self.testTa * 100) + '%',
+                      "%0.2f" % (self.testNa * 100) + '%',
+                      duration,
+                      "%s" % st,
+                      "%s" % endt, str(modelinst.epoch), str(modelinst.minibatch), self.dirname,
+                      hpDict["TFromDate"], hpDict["TToDate"],
+                      hpDict['TestFromD'], hpDict['TestToD']]
+        else:
+            # update test result  to file according to above column sequence
+            # training auc,loss, training accuracy are NA,since model is reload from disk,no training
+            result = [seqid, modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
                   modelinst.regularization,
                   "%02d" % modelinst.hiddenLayer,
                   "%d" % modelinst.hiddenUnit,
@@ -308,9 +357,9 @@ class ModelStore(object):
                   "%0.4f" % modelinst.lrdecay,
                   "%0.4f" % modelinst.decaystep,
                   "%d" % modelinst.rs,
-                  "%0.4f" % self.trainAuc,
-                  "%0.4f" % modelinst.model.trainer.training_state.global_loss,
-                  "%0.2f" % (self.trainTa * 100) + '%',
+                  "NA",
+                  "NA",
+                  "NA",
                   "%0.4f" % self.testAuc,
                   "%0.2f" % (self.testTa * 100) + '%',
                   "%0.2f" % (self.testNa * 100) + '%',
@@ -321,94 +370,62 @@ class ModelStore(object):
                   hpDict['TestFromD'], hpDict['TestToD']]
 
         trackRecord = TestResult(self.testRecordName)
-
         trackRecord.append(result)
 
+    def evaluateTestSet(self, seqid, X_test,y_test,itemDict):
+        '''
+        1.evaluate the model using the test data only
+        2.generate auc,accuracy etc
+        3. generate and plot ROC and save the plt file
+        4. append the test result to csv file
+        :param itemDict:
+        :param X_test:
+        :param y_test:
+        :param seqid: id# from ModelEvalPlan.csv
+        :return:
+        '''
+        log("Evaluate the trained model with test data only,save its plot")
+        assert (self.loadmymodel is not None)
+        assert(isinstance(self.loadmymodel, DnnModel))
+        assert (self.dpp is not None)
+        assert (isinstance(self.dpp, DataPreprocess))
+        assert (self.hpDict is not None)
+        try:
+            figTitle = "%dRunid_%s_%s_%s_epoch%d_minibatch%d" \
+                       % (seqid,self.loadmymodel.runid, self.hpDict['Preprocessor'],
+                          self.loadmymodel.opt.name,
+                          self.loadmymodel.epoch, self.loadmymodel.minibatch)
+            figid = plt.figure(figTitle, figsize=(10, 8))
+            figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
 
-    # def evaluateTestSet(self,hpDict,X_test,y_test):
-    #     '''
-    #     1.evaluate the model using the test data only
-    #     2.generate auc,accuracy etc
-    #     3. generate and plot ROC and save the plt file
-    #     4. append the test result to csv file
-    #     :param hpDict:
-    #     :param X_test:
-    #     :param y_test:
-    #     :return:
-    #     '''
-    #     log("Evaluate the trained model with test data only,save its plot")
-    #
-    #     try:
-    #         figTitle = "Runid_%s_%s_%s_epoch%d_minibatch%d" % (self.runid, hpDict['Preprocessor'], self.opt.name,
-    #                                                            self.epoch, self.minibatch)
-    #         figid = plt.figure(figTitle, figsize=(10, 8))
-    #         figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
-    #
-    #
-    #         # evaluate the model with Test data
-    #         testAuc, testTa, testNa = evalprint(self.model, X_test, y_test, "with Test data (Runid=%s)"%self.runid,
-    #                                             figid, 1, 1, 1, annotate=True, drawplot=True)
-    #
-    #         # update test result  to file
-    #
-    #         plotName = "%s_%s_alpha%0.4f_epoch%d_%d.png" \
-    #                    % (hpDict['Preprocessor'], self.opt.name, self.learningrate,
-    #                       self.epoch, self.minibatch)
-    #         fullpath = ''.join((EXPORT_DIR, self.runid))
-    #         if os.path.isfile(fullpath):
-    #             log("file %s exists, do not overwrite it!!!!" % fullpath)
-    #         elif os.path.isdir(fullpath) == False:
-    #             os.mkdir(fullpath)
-    #         fullpath = ''.join((EXPORT_DIR, self.runid, '/', plotName))
-    #         plt.savefig(fullpath, figsize=(10, 8))  # if the file exists, overwrite it
-    #
-    #         # model.trainer.training_state.val_loss, \
-    #         # model.trainer.training_state.val_acc,\
-    #
-    #         # calculate the duration of building/training/evaluate the model
-    #         endTime = time.time()  # end time in ms.
-    #         elapseTime = (endTime - self.startTime)
-    #         hour = int(elapseTime / 3600)
-    #         minute = int((elapseTime % 3600) / 60)
-    #         second = int((elapseTime % 3600) % 60)
-    #         duration = "%dh%d'%d''" % (hour, minute, second)
-    #
-    #         log("\nthe time of building/training/evaluating the model is %s" % (duration))
-    #
-    #         # update test result  to file according to above column sequence training auc,loss, training accuracy are NA
-    #         result = [hpDict['Seqno'], self.runid, hpDict['Preprocessor'], self.opt.name,
-    #                   self.regularization,
-    #                   "%02d" % self.hiddenLayer,
-    #                   "%d" % self.hiddenUnit,
-    #                   "%0.2f" % self.inputKeepProb,
-    #                   "%0.2f" % self.keepProb,
-    #                   "%0.4f" % self.learningrate,
-    #                   "%0.4f" % self.lrdecay,
-    #                   "%0.4f" % self.decaystep,
-    #                   "%d" % self.rs,
-    #                   "NA",
-    #                   "NA",
-    #                   "NA",
-    #                   "%0.4f" % testAuc,
-    #                   "%0.2f" % (testTa * 100) + '%',
-    #                   "%0.2f" % (testNa * 100) + '%',
-    #                   duration,
-    #                   "%s" % (self.st),
-    #                   "%s" % (time.ctime()), str(self.epoch), str(self.minibatch), fullpath,
-    #                   "NA", 'NA','NA',
-    #                   hpDict["Test"], hpDict['TestFromD'], hpDict['TestToD']]
-    #
-    #         trackRecord = TestResult(testResultfile)
-    #
-    #         trackRecord.append(result)
-    #
-    #         # plt.show()  # display the ROC plot onscreen, if plot ROC is not needed, you must comment this line out!!!
-    #         plt.close(figid)  # close it to release memory
-    #     except Exception as e1:
-    #         print ('=' * 30 + "exception happened:" + '=' * 30)
-    #         print(Exception)
-    #         print(e1)
-    #         print ('=' * 30 + "end of print exception" + '=' * 30)
+            # evaluate the model with Test data
+            self.testAuc, self.testTa, self.testNa = evalprint(self.loadmymodel.model,
+                                                               X_test, y_test,
+                          "with Test data (seqid=%d) From %s to %s"
+                          % (seqid,itemDict["TestFromD"], itemDict["TestToD"]),
+                          figid, 1, 1, 1, annotate=True, drawplot=True)
+
+            # save the plot to a file under the same runid folder
+            #  with seqid as part of its name to save multiple testset plots
+            # that share the same training model
+            plotName = "%d%s_%s_alpha%0.4f_epoch%d_%d.png" \
+                       % (seqid, self.dpp.preScalerClassName, self.loadmymodel.opt.name,
+                          self.loadmymodel.learningrate,
+                          self.loadmymodel.epoch, self.loadmymodel.minibatch)
+            fullpath = ''.join((EXPORT_DIR, self.loadmymodel.runid))
+            if os.path.isfile(fullpath):
+                log("file %s exists, do not overwrite it!!!!" % fullpath)
+            elif not os.path.isdir(fullpath):
+                os.mkdir(fullpath)
+            fullpath = ''.join((EXPORT_DIR, self.loadmymodel.runid, '/', plotName))
+            plt.savefig(fullpath, figsize=(10, 8))  # if the file exists, overwrite it
+            # plt.show()  # display the ROC plot onscreen, if plot ROC is not needed, you must comment this line out!!!
+            plt.close(figid)  # close it to release memory
+        except Exception as e1:
+            print ('=' * 30 + "exception happened:" + '=' * 30)
+            print(Exception)
+            print(e1)
+            print ('=' * 30 + "end of print exception" + '=' * 30)
 
 
 

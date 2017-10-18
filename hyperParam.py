@@ -18,7 +18,7 @@ class HyperParam(object):
     '''
     def __init__(self,filename):
         self.filename=filename
-        self.rows=[]
+        self.rows = []
 
         # to make sure it's different from any valid preprocessor in system
         self.lastPreProcessor = 'Initial'

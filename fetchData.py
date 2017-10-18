@@ -110,7 +110,7 @@ class FetchData(object):
 
     # ugly implementation to get datafilename according to fromDate and toDate
     # to be improved later
-    def __getDatafileFullpath(self,fromDate,toDate):
+    def _getDatafileFullpath(self,fromDate,toDate):
         stDate = datetime.datetime.strptime(fromDate, "%Y/%m/%d")
         endDate = datetime.datetime.strptime(toDate, "%Y/%m/%d")
         if stDate >= datetime.datetime.strptime("2005/01/01","%Y/%m/%d") and \
@@ -136,7 +136,7 @@ class FetchData(object):
         # Load datasets. discard column 0,1,3,4 in the original csvfile ,which represent  id ,tradedate,mc_date,datadate
 
         try:
-            self.__getDatafileFullpath(fromDate, toDate)
+            self._getDatafileFullpath(fromDate, toDate)
             rawData = self.load_partcsv_without_header(
                 filename=self.datafilename,
                 target_dtype=np.int,
@@ -177,7 +177,6 @@ class FetchData(object):
         with gfile.Open(filename) as csv_file:
             data_file = csv.reader(csv_file)
             data, target = [], []
-            dest_rowid = 0
             missingvaluecount = 0
             hitCount = 0  # the total row number that has been read into data
             featureNames = []  # a list to hold all required feature names
