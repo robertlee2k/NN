@@ -74,6 +74,7 @@ def main():
         log("\n sanity check on Model Eval plan file(%s) PASSED " % loadEvalPlan)
 
     for seqid in range(0, lp.rows.__len__()):
+        loopstartTime = time.time()  # start time in ms.
         try:
             itemDict = lp.readRow(rowId=seqid)
         except ValueError as e:
@@ -86,10 +87,24 @@ def main():
         if itemDict['Skip'] == supportedSkip[2] or itemDict['Skip'] == supportedSkip[3]:  # this row is comment out, not run
             continue
 
+        log('\nloading test data from:%s,to:%s in progress ... time:%s'
+                % (itemDict["TestFromD"], itemDict["TestToD"], time.ctime()))
         try:
-            # looking for required model and its accompanied dpp,hyperparam instance
-            log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Test) is at least %s"
-                % (seqid, itemDict['TFromDate'],itemDict['TToDate'],itemDict['AUC(Test)']))
+            test_set = FetchData().loadData(itemDict["TestFromD"], itemDict["TestToD"])
+        except ValueError as e:
+            log('=' * 30 + "ValueError Exception happened:" + '=' * 30)
+            log(e.message)
+            log('=' * 30 + "end of print ValueError exception" + '=' * 30)
+            log("ValueError occurred in loading test data, skip this iteration")
+            continue
+        # plot original test data to review
+        # plotFeatures(test_set.data,test_set.featurenames,[1],
+        #               itemDict["TestFromD"]+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
+
+        # looking for required model and its accompanied dpp,hyperparam instance
+        log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Test) is at least %s"
+            % (seqid, itemDict['TFromDate'],itemDict['TToDate'],itemDict['AUC(Test)']))
+        try:
             modelst = ModelStore()
             modelst.getModelFullpath(itemDict['TFromDate'],
                                      itemDict['TToDate'],
@@ -102,8 +117,8 @@ def main():
             log(str(modelst.matchedModelLocations))
             modelid = 1
             for dirname in modelst.matchedModelLocations:
-                loopstartTime = time.time()  # start time in ms.
-                log("seqid=%d,modelid=%d ---> using trained model at:%s" % (seqid,modelid, dirname))
+                log('='*20 + "   seqid=%d,modelid=%d ---> using trained model at:%s   "
+                    % (seqid,modelid, dirname) + '='*20)
                 try:
                     # load the trained model and its accompanied hyperparam,data preprocess files
                     # from the retrieved location : dirname
@@ -121,88 +136,34 @@ def main():
                 except Exception as e:  # any other exceptions, just skip this evaluation, not a big deal
                     continue
 
-                log('\nloading test data from:%s,to:%s in progress ... time:%s'
-                    % (itemDict["TestFromD"], itemDict["TestToD"], time.ctime()))
+                # apply the same preprocess as used for training set to test_set
+                log("\n apply datapreprocess %s to test_set" % modelst.dpp.__class__.__name__)
+                X_test = modelst.dpp.transform(test_set)
+                y_test = test_set.target
                 try:
-                    test_set = FetchData().loadData(itemDict["TestFromD"], itemDict["TestToD"])
-                except ValueError as e:
-                    log('=' * 30 + "ValueError Exception happened:" + '=' * 30)
-                    log(e.message)
-                    log('=' * 30 + "end of print ValueError exception" + '=' * 30)
-                    log("ValueError occurred in loading test data, skip this iteration")
+                    modelst.evaluateTestSet(seqid, X_test, y_test,itemDict)
+
+                    # calculate the duration of this loop, update record
+                    loopElapsedTime = duration(loopstartTime)
+                    log("\nthe time of loading the model/evaluating the model is %s" % loopElapsedTime)
+                    modelst.writeResult(seqid, modelst.hpDict, modelst.loadmymodel, st, time.ctime(), loopElapsedTime)
+
+                except ValueError as ve:
+                    log("Value Exception happened,bypass this iteration")
+                    log(ve.message)
                     continue
-                else:
-                    # plot original test data to review
-                    # plotFeatures(test_set.data,test_set.featurenames,[1],
-                        # itemDict["TestFromD"]+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
-                    #apply the same preprocess to test_set
-                    log("\n apply datapreprocess %s to test_set" % modelst.dpp.__class__.__name__)
-                    X_test = modelst.dpp.transform(test_set)
-                    y_test = test_set.target
-                    try:
-                        modelst.evaluateTestSet(seqid, X_test, y_test,itemDict)
-
-                        # calculate the duration of this loop, update record
-                        loopElapsedTime = duration(loopstartTime)
-                        log("\nthe time of loading the model/evaluating the model is %s" % loopElapsedTime)
-                        modelst.writeResult(seqid, modelst.hpDict, modelst.loadmymodel, st, time.ctime(), loopElapsedTime)
-
-                    except ValueError as ve:
-                        log("Value Exception happened,bypass this iteration")
-                        log(ve.message)
-                        continue
-                    except IOError as ie:
-                        log("IOError exception occured. bypass this iteration")
-                        log(ie.message)
-                        continue
-                    modelid += 1
+                except IOError as ie:
+                    log("IOError exception occured. bypass this iteration")
+                    log(ie.message)
+                    continue
+                modelid += 1
             # reduce a reference to instance of DNNModel since its task has come to an end.
             # let system to gabage collect it
             del modelst
         except ValueError as ve:
-            log("Value Error exception happened, abort execution.")
+            log("Value Error exception happened, can't find the Training model result file,abort execution.")
             log(ve.message)
             break
-
-
-
-        # else:   #only predict and evaluate ,skip training process
-        #     #initiate a empty model, load the weight from the the saved model to reevaluate,double check the model's load function
-        #     log('\nloading test data from file %s from:%s,to:%s in progress ... time:%s'
-        #         % (hpDict["Test"], hpDict["TestFromD"], hpDict["TestToD"], time.ctime()))
-        #     fd = FetchData(hpDict["Test"], hpDict["TestFromD"], hpDict["TestToD"], TestDataStart, TestDataStop)
-        #     try:
-        #         test_set = fd.loadData()
-        #     except ValueError as e:
-        #         print('=' * 30 + "ValueError Exception happened:" + '=' * 30)
-        #         print(e)
-        #         print('=' * 30 + "end of print ValueError exception" + '=' * 30)
-        #         log("ValueError occurred in loading test data, skip this iteration")
-        #         continue
-        #         # plot original test data to review
-        #         # plotFeatures(test_set.data,test_set.featurenames,[1],"Orig17Jan-17Septest",savePlotToDisk=True,scatterAdjust=False)
-        #
-        #
-        #
-        #
-        #     tf.reset_default_graph()
-        #     y_test = test_set.target
-        #     loadmymodel = DnnModel(hpDict,runId+'load'+hpDict['Seqno'])  # use this runId + seqno combination as <runid> to distinguish multiple load models from original model, don't retrain the model
-        #     try:
-        #         loadmymodel.loadModel(hpDict,runId,dataPreprocessDumpfile)         # load its preprocess and datascaler
-        #         X_test= loadmymodel.dpp.transform(test_set)  # use the same scaler to transform test_set.data
-        #     except IOError as ve:  #can't find the trained model from disk
-        #         log(ve.message)
-        #         log("\nWARNING:  Skip this evaluation process ... ")
-        #         continue
-        #     except Exception:    # any other exceptions, just skip this evaluation, not a big deal
-        #         log("\nWARNING:  Exception occurred, skip this evaluation... ")
-        #         continue
-        #     else:
-        #         loadmymodel.evaluateTestSet(hpDict,X_test,y_test) # output the ROC to disk with <runid>load folder name
-        #         log('\nload trained model & reevaluate completed! ')
-        #     del loadmymodel  # delete instance of DNNModel since its task has come to an end. let system to gc it
-        #     del test_set, X_test, y_test
 
     wholetime = duration(runStartTime)
     log("\nthe WHOLE ELAPSED time of loading test data and evaluating all the models is %s"
