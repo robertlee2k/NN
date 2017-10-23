@@ -4,6 +4,10 @@ import os
 import datetime
 
 from utility import log
+
+
+DATAFILE_RANGE = {"mindate": datetime.datetime.strptime("2005/01/01","%Y/%m/%d"),
+                  "maxdate": datetime.datetime.strptime("2017/08/31", "%Y/%m/%d")}
 supportedOptimizer= ('Adam', 'Momentum', 'RMSProp','SGD')
 supportedScaler =('MinMax', 'Standard', 'MidRange')
 supportedRegularization = ('None','L2','L1')
@@ -96,32 +100,42 @@ class HyperParam(object):
                     errorFound = True
                 if not row['Skip'] in supportedSkip:
                     log('\n Skip column must be left either N/n or Y/y in seq %s' %row['Seqno'])
-                    errorFound=True
-                # if not os.path.exists(row["Train"]) or not os.path.exists(row['Test']):
-                #     log('\n Train file or Test file in seq %s does NOT exist' % row['Seqno'])
-                #     errorFound = True
-
+                    errorFound = True
                 # try conversion, if the raw data is in wrong format, the following will generate ValueError exception
                 # time data 'xxxxxx' does not match format '%Y/%m/%d'
                 # which will be captured by except clause
                 stDate = datetime.datetime.strptime(row["TFromDate"], "%Y/%m/%d")
                 toDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
+                if stDate >= toDate:
+                    raise ValueError("TFromDate could not be later than TToDate in Seqno %s," % row['Seqno'])
+                if stDate < DATAFILE_RANGE['mindate'] or toDate > DATAFILE_RANGE['maxdate']:
+                    raise ValueError("TFromDate or TToDate is beyond the available datafile range"
+                                     " [%s - %s] in seq %s" % (DATAFILE_RANGE['mindate'],
+                                                           DATAFILE_RANGE['maxdate'],
+                                                           row['Seqno']))
+
                 stDate = datetime.datetime.strptime(row["TestFromD"], "%Y/%m/%d")
                 toDate = datetime.datetime.strptime(row["TestToD"], "%Y/%m/%d")
-
+                if stDate >= toDate:
+                    raise ValueError("TestFromD could not be later than TestToD in Seqno %s," % row['Seqno'])
+                if stDate < DATAFILE_RANGE['mindate'] or toDate > DATAFILE_RANGE['maxdate']:
+                    raise ValueError("TestFromD or TestToD is beyond the available datafile range"
+                                     " [%s-%s] in seq %s" % (DATAFILE_RANGE['mindate'],
+                                                           DATAFILE_RANGE['maxdate'],
+                                                           row['Seqno']))
                 tmp = int(row['Seqno'])+int(row['decaystep'])+int(row['RS'])+int(row['Epoch'])+int(row['Minibatch'])\
-                    + int(row["HiddenLayer"])+ int(row['HiddenUnit'])
+                    + int(row["HiddenLayer"]) + int(row['HiddenUnit'])
                 tmp = float(row['Alpha'])+float(row['lrdecay'])+float(row['KeepProb'])+float(row['InputKeepProb'])
             except ValueError as e:
                 log(e.message)
-                log("\nFatal Error: wrong data type in seq %s" %(row['Seqno']))
-                errorFound=True
+                log("Fatal Error: wrong data in seq %s" %(row['Seqno']))
+                errorFound = True
             except KeyError as e:
                 errorFound = True
-                raise KeyError(("\nFatal Error: KeyError happened, key %s is not found" %(e.message)))
+                raise KeyError(("Fatal Error: KeyError happened, key %s is not found" % e.message))
         if errorFound:
-            print ("\n valid keywords should be in the following tuples:")
-            print (supportedScaler, supportedOptimizer, supportedRegularization)
+            # print ("valid keywords should be in the following tuples:")
+            # print (supportedScaler, supportedOptimizer, supportedRegularization)
             raise ValueError ("Invalid parameters found in file %s, please correct them before rerun" % self.filename)
 
 

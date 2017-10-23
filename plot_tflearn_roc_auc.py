@@ -27,7 +27,7 @@ different the splits of training data and test data are from one another.
              :ref:`sphx_glr_auto_examples_model_selection_plot_roc.py`,
 
 """
-print(__doc__)
+# print(__doc__)
 
 import numpy as np
 from scipy import interp

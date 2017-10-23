@@ -1,22 +1,4 @@
 
-DATAFILEPATH="/home/topleaf/stock/tensorFlowData/"
-DATAFILELIST=["tensorFlowData(200501-201012).csv", "tensorFlowData(201101-201612).csv",
-              "tensorFlowData(201701-201709).csv"]
-
-TRAINDATASTART = 1      # the row# of the beginning of training data
-TRAINDATASTOP = 1132174  # the row# of the end of the training data record  2013-2015csv file
-DATASTART = 1     # the row# of the starting in test csv file 2016-2017
-DATASTOP = 1500000  # 1132174  # the last row of the whole file, this row# is excluded in test data
-
-TrainDataStart = 1
-TrainDataStop = DATASTOP  # for debugging purpose ,you can adjust this to get a small part for time saving now
-TestDataStart = 1
-TestDataStop = DATASTOP     # for debugging purpose ,you can adjust this to get a small part for time saving now
-
-# the following definition specified the column id# in original csv data file,starting from 0
-DataDateColumn = 4
-SelectedAvglineColumn = 6
-
 from tensorflow.python.platform import gfile
 import datetime
 import collections
@@ -24,8 +6,32 @@ import csv
 import numpy as np
 
 #the following packages  are part of the project
-from hyperParam import selectedAvgline
+from hyperParam import selectedAvgline, DATAFILE_RANGE
 from utility import log
+
+DATAFILEPATH = "/home/topleaf/stock/tensorFlowData/"
+
+# make sure the files have meaningful names that reflect their data range!!!!  in alphabet order.
+DATAFILELIST = {"tensorFlowData(200501-201012).csv":
+                (datetime.datetime.strptime("2005/01/01","%Y/%m/%d"),
+                datetime.datetime.strptime("2010/12/31","%Y/%m/%d")),
+                "tensorFlowData(201101-201612).csv":
+                (datetime.datetime.strptime("2011/01/01","%Y/%m/%d"),
+                datetime.datetime.strptime("2016/12/31","%Y/%m/%d")),
+                "tensorFlowData(201701-201709).csv":
+                (datetime.datetime.strptime("2017/01/01", "%Y/%m/%d"),
+                 datetime.datetime.strptime("2017/08/31", "%Y/%m/%d")),
+              }
+
+DATASTART = 1     # the starting row# of the data file to be read
+DATASTOP = 1500000  # the last row of the data file to be read, must set it to big enough
+                    # use fromDate/toDate to specify the actual read row lines
+
+
+# the following definition specified the column id# in original csv data file,starting from 0
+DataDateColumn = 4
+SelectedAvglineColumn = 6
+
 Dataset = collections.namedtuple('Dataset', ['data', 'target', 'featurenames'])
 
 
@@ -90,7 +96,7 @@ def load_csv_calc_profit(filename,
 class FetchData(object):
     """
     this class handle data file fetch,
-    its load method returns  rawdata in Dataset format
+    its loadData method returns  rawdata in Dataset format
     input: fromDate, toDate
     internal
 
@@ -104,26 +110,63 @@ class FetchData(object):
         return FetchData.__instance
 
     def __init__(self):
-        self.datafilename = None
-        pass
+        self.datafilelist = []
 
 
-    # ugly implementation to get datafilename according to fromDate and toDate
-    # to be improved later
+    def _isIntersection(self,fromDate1,toDate1,fromDate2,toDate2):
+        """
+        check if [fromDate1,toDate1] and [fromDate2,toDate2] has intersection
+        :param fromDate1:
+        :param toDate1:
+        :param fromDate2:
+        :param toDate2:
+        :return:
+        """
+        assert(fromDate1<=toDate1 and fromDate2<=toDate2)
+
+        if toDate2 >= fromDate1 >= fromDate2 or toDate2 >= toDate1 >= fromDate2:
+            return True
+        if fromDate1 <= fromDate2 and toDate1 >= toDate2:
+            return True
+        else:
+            return False
+
+    # get datafilelist according to fromDate and toDate
     def _getDatafileFullpath(self,fromDate,toDate):
+        """
+        looking for the data files' absolute full paths and return a list of those data file names
+        :param fromDate:
+        :param toDate:
+        :return:  it update self.datafilelist member variable with
+        a filename list that contains all files whose data are within fromDate,toDate range
+        """
         stDate = datetime.datetime.strptime(fromDate, "%Y/%m/%d")
         endDate = datetime.datetime.strptime(toDate, "%Y/%m/%d")
-        if stDate >= datetime.datetime.strptime("2005/01/01","%Y/%m/%d") and \
-            endDate <= datetime.datetime.strptime("2010/12/31","%Y/%m/%d"):
-            self.datafilename= ''.join((DATAFILEPATH,DATAFILELIST[0]))
-        elif stDate >= datetime.datetime.strptime("2011/01/01","%Y/%m/%d") and \
-            endDate <= datetime.datetime.strptime("2016/12/31","%Y/%m/%d"):
-            self.datafilename= ''.join((DATAFILEPATH,DATAFILELIST[1]))
-        elif stDate >= datetime.datetime.strptime("2017/01/01","%Y/%m/%d") and \
-            endDate <= datetime.datetime.strptime("2017/09/30","%Y/%m/%d"):
-            self.datafilename = ''.join((DATAFILEPATH,DATAFILELIST[2]))
-        else:
-            raise ValueError("failed to locate datafilename")
+        self.datafilelist = []
+
+        for filename in DATAFILELIST.keys():
+            if self._isIntersection(stDate,endDate,
+                                    DATAFILELIST[filename][0], DATAFILELIST[filename][1]):
+                self.datafilelist.append(''.join((DATAFILEPATH, filename)))
+
+        # this might be a redundant check, the date validity should have been verified when calling
+        # hyperParam.sanitycheck() upon starting the program.
+        # anyway, just keep it to be more alertive to abnormal date input
+        if stDate<DATAFILE_RANGE["mindate"] or endDate >DATAFILE_RANGE['maxdate']:
+            raise ValueError("the fromDate %s is earlier than date of available datafiles"
+                             " or toDate %s is later than date of available datafiles"
+                             %(fromDate, toDate))
+
+        datafilenum = self.datafilelist.__len__()
+        if datafilenum == 0:
+            raise ValueError(" failed to locate any data files between %s and %s!!!"
+                             %(fromDate, toDate))
+
+        self.datafilelist.sort()
+        log(" %d data file(s) located:" % datafilenum)
+        for i in range(datafilenum):
+            log("%d: " % (i + 1) + str(self.datafilelist[i]))
+
 
     def loadData(self, fromDate, toDate):
         """
@@ -137,24 +180,46 @@ class FetchData(object):
 
         try:
             self._getDatafileFullpath(fromDate, toDate)
-            rawData = self.load_partcsv_without_header(
-                filename=self.datafilename,
+            # self.datafilelist is loaded with a sequence of datafile names that contains data between
+            # fromData and toDate, the following code is to iterate those files, load data,
+            # concatenate them into a fullData,fullTarget numpy array.
+            datafilename = self.datafilelist.pop(0)
+            fullData, fullTarget, feature_names = self.load_partcsv_without_header(
+                filename=datafilename,
                 target_dtype=np.int,
                 features_dtype=np.float32,
-                start_rowid = DATASTART,
-                end_rowid = DATASTOP,
-                fromDate = fromDate,
-                toDate = toDate,
-                discard_colids=[0, 1, 3, 4, -1],
-                # add -1 in the last column to exclude the percentage infor,include 2# stockcode,
+                start_rowid=DATASTART,
+                end_rowid=DATASTOP,
+                fromDate=fromDate,
+                toDate=toDate,
+                discard_colids=[0, 1, 2, 3, 4, -1],
+                # add -1 in the last column to exclude the percentage infor,exclude 2# stockcode,
                 target_column=5,
                 filling_value=1.0,
                 selectedAvgline=selectedAvgline
             )
+            for datafilename in self.datafilelist:
+                partData, partTarget, feature_names = self.load_partcsv_without_header(
+                    filename=datafilename,
+                    target_dtype=np.int,
+                    features_dtype=np.float32,
+                    start_rowid=DATASTART,
+                    end_rowid=DATASTOP,
+                    fromDate=fromDate,
+                    toDate=toDate,
+                    discard_colids=[0, 1, 2, 3, 4, -1],
+                    # add -1 in the last column to exclude the percentage infor,exclude 2# stockcode,
+                    target_column=5,
+                    filling_value=1.0,
+                    selectedAvgline=selectedAvgline
+                )
+                fullData = np.concatenate((fullData, partData),axis=0)
+                fullTarget = np.concatenate((fullTarget, partTarget), axis=0)
+
         except ValueError as e:
             raise ValueError(e)  #capture and throw the exception to the caller
         else:
-            return rawData
+            return Dataset(data=fullData, target=fullTarget, featurenames=feature_names)
 
     def load_partcsv_without_header(self,filename,
                                     target_dtype,
@@ -174,6 +239,7 @@ class FetchData(object):
         fromDate format: '2017/3/13'
         selectedAvgline is a tuple that include all desired data whose selectedAvgline column match the content in the tuple,
         """
+        log("Loading data to memory from %s ,this will take a while ... ..." % filename)
         with gfile.Open(filename) as csv_file:
             data_file = csv.reader(csv_file)
             data, target = [], []
@@ -207,12 +273,11 @@ class FetchData(object):
                     dt = datetime.datetime.strptime(row[DataDateColumn],
                                                     "%Y/%m/%d")  # convert DataDate from string to datetime format
                     if dt >= stDate and dt <= endDate:  # read the desired data between 'From' and 'To' date
-                        if row[
-                            SelectedAvglineColumn] in selectedAvgline:  # only load the required rows that match the avgline parameters
+                        # only load the required rows that match the avgline parameters
+                        if row[SelectedAvglineColumn] in selectedAvgline:
                             target.append(row.pop(target_column))
-                            for j in sorted(discard_colids,
-                                            reverse=True):  # delete the columns whose indexes are in list discard_colids
-                                del row[j]
+                            for j in sorted(discard_colids,reverse=True):
+                                del row[j]  # delete the columns whose indexes are in list discard_colids
                             data.append(row)
                             hitCount += 1
                             # else:
@@ -222,14 +287,14 @@ class FetchData(object):
 
             log('\ntotal row# read from this data file %s is (%d out of %d)' % (filename, hitCount, i))
             if missingvaluecount != 0:
-                log(
-                    "\n!!! WARNING: the input data file %s has %d blank value(s),setting its value to %d as a workaround, please check and fill them later!!!" % (
-                    filename, missingvaluecount, filling_value))
-            if hitCount==0:     #no data is loaded
+                log("\n!!! WARNING: the input data file %s has %d blank value(s),"
+                    "setting its value to %d as a workaround, please check and fill them later!!!"
+                    % (filename, missingvaluecount, filling_value))
+            if hitCount == 0:     #no data is loaded
                 raise ValueError("No data is loaded, check your %s and fromdate:%s,ToDate%s" %(filename,fromDate,toDate))
 
             data = np.array(data, dtype=features_dtype)
             target = np.array(target, dtype=target_dtype)
 
-        return Dataset(data=data, target=target, featurenames=featureNames)
+        return data, target, featureNames
 

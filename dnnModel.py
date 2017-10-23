@@ -98,7 +98,7 @@ class DnnModel(object):
         # try pca
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
-        net = tflearn.input_data([None, 166], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+        net = tflearn.input_data([None, 165], data_preprocessing=None, data_augmentation=None, name="inputlayer")
         net = tflearn.dropout(net, keep_prob=self.inputKeepProb, noise_shape=None, name='dropoutlayer0')
 
         for l in range(self.hiddenLayer):
@@ -116,6 +116,7 @@ class DnnModel(object):
     def train(self, X, y, X_test, y_test):
         self.runid = tflearn.utils.id_generator()  # unique id for fit this model
         self.model.fit(X, y, validation_set=(X_test, y_test), shuffle=True, show_metric=True,
+        #   self.model.fit(X, y, validation_set=0.01, shuffle=True, show_metric=True,
                        run_id=self.runid,batch_size=self.minibatch,
                        n_epoch=self.epoch, snapshot_epoch=False, snapshot_step=10000)
 

@@ -1,6 +1,6 @@
 
 """
-
+==================================================================================================
 this program is a DNN stock models' consumer
 its input: 1. ModelLoadEvalPlan.csv
            2. DNN_training_results.csv
@@ -14,14 +14,14 @@ according to DNN_training_results.csv which is produced by model training produc
 it also load test data according to the ModelLoadEvalPlan.csv
 evaluate the trained model over the loaded test data,record their metrics, save the result back to
 DNN_training_result.csv
-
+======================================================================================================
 """
-
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+print(__doc__)
 import time
 
 # the following packages  are part of the project
@@ -99,7 +99,7 @@ def main():
             continue
         # plot original test data to review
         # plotFeatures(test_set.data,test_set.featurenames,[1],
-        #               itemDict["TestFromD"]+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
+        #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
 
         # looking for required model and its accompanied dpp,hyperparam instance
         log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Test) is at least %s"
@@ -139,6 +139,9 @@ def main():
                 # apply the same preprocess as used for training set to test_set
                 log("\n apply datapreprocess %s to test_set" % modelst.dpp.__class__.__name__)
                 X_test = modelst.dpp.transform(test_set)
+                # plot transformed test data to review
+                # plotFeatures(X_test,test_set.featurenames,[1],
+                #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
                 y_test = test_set.target
                 try:
                     modelst.evaluateTestSet(seqid, X_test, y_test,itemDict)

@@ -249,14 +249,14 @@ class ModelStore(object):
                         raise Exception(e.message)
         return self
 
-    def evaluate(self, seqid, modelinst, dp, X, y, X_test, y_test):
+    def evaluate(self, seqid, modelinst, dp, X, y, X_test, y_test,desc):
         """
         1.evaluate the model using training data and test data
         2.generate auc,accuracy etc,
         3. generate and plot ROC and save the plt file
         4. append the test result to csv file
 
-        :param hpDict:
+        :param : desc is a description for this plot, will be used in plotfilename
         :return: None
         """
 
@@ -278,12 +278,12 @@ class ModelStore(object):
                                                    figid, 2, 1, 1, False, True)
 
             # evaluate the model with Test data
-            self.testAuc, self.testTa, self.testNa = evalprint(modelinst.model, X_test, y_test, "with Test data ",
+            self.testAuc, self.testTa, self.testNa = evalprint(modelinst.model, X_test, y_test, "with data " + desc,
                                                                figid, 2, 1, 2, annotate=True, drawplot=True)
 
             # update test result  to file
-            plotName = "%s_%s_alpha%0.4f_epoch%d_%d.png" \
-                       % (dp.preScalerClassName, modelinst.opt.name, modelinst.learningrate,
+            plotName = "%s_%s_%s_alpha%0.4f_epoch%d_%d.png"\
+                       % (desc, dp.preScalerClassName, modelinst.opt.name, modelinst.learningrate,
                           modelinst.epoch, modelinst.minibatch)
             fullpath = ''.join((EXPORT_DIR, modelinst.runid))
             if os.path.isfile(fullpath):

@@ -8,6 +8,47 @@ import matplotlib.pyplot as plt
 
 logfilename = "/tmp/stockNN2.log"
 
+def datasetShuffle(X, y):
+    """
+    shuffle the dataset of  ndarray
+    :param X:
+    :param y:
+    :return:
+    """
+
+    assert(isinstance(X,np.ndarray))
+    assert(isinstance(y,np.ndarray))
+
+    y.shape = (y.shape[0], 1)
+    dataset = np.hstack((X, y))
+    np.random.shuffle(dataset)
+    X = dataset[:, 0:-1]
+    y = dataset[:, -1]
+
+    return X, y
+
+
+def datasetSplit(X,y,splitRate=0.01):
+    """
+    split the original X,y into 2 parts according to splitRate
+    :param X:
+    :param y:
+    :param splitRate: a float to indicate the percentage of the second part in the whole dataset
+    :return: Xfront,yfront,Xsecond,ysecond
+    """
+    assert(isinstance(X,np.ndarray))
+    assert(isinstance(y,np.ndarray))
+    assert(1.0 >= splitRate >= 0.0)
+
+    firstleng = long(X.shape[0]*(1-splitRate))
+
+    Xsecond = X[firstleng:,:]
+    ysecond = y[firstleng:]
+    X = X[0:firstleng,:]
+    y = y[0:firstleng]
+    return X,y,Xsecond,ysecond
+
+
 def duration(startTime):
     """
     calculation passed time from startTime
@@ -71,8 +112,10 @@ def printConfusionMatrix(cm):
     output+="FPR(1)=%0.4f, TPR(1)=%0.4f\n"%(FPR1,TPR1)
     return output
 
-#visualize  the batch features in both a scatter subplot to review the min-max range of the features in a whole picture
+# visualize  the batch features in both a scatter subplot to
+# review the min-max range of the features in a whole picture
 # and a subplot of histogram for each features' distribution
+
 
 def plotFeatures(batch,datasetFeatureNames,featureidlist,desc=None,savePlotToDisk=True,scatterAdjust=False):
     """
@@ -83,6 +126,8 @@ savePlotTodisk : whether or not save the plots to disk
 scatterAdjust : whether scale Y scale to fit for current min/max , set it to False if you want to compare all features'
 absolute min/max value in one scatter plot
     """
+    if desc is not None:
+        desc = str(desc.split('/'))  # remove the possible '/' and convert it to a string
     xscatter=[]   # hold the x axis coordinates, which is column id#
     yscatter=[]   # hold a tuple with (minvalue,maxvalue) for that x
     n_sample,n_feature= batch.shape
