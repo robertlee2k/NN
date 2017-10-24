@@ -11,9 +11,9 @@ logfilename = "/tmp/stockNN2.log"
 def datasetShuffle(X, y):
     """
     shuffle the dataset of  ndarray
-    :param X:
-    :param y:
-    :return:
+    :param X:  X is n-d ndarray
+    :param y: y is 1-d ndarray
+    :return:  shuffled X and y
     """
 
     assert(isinstance(X,np.ndarray))
@@ -44,9 +44,9 @@ def datasetSplit(X,y,splitRate=0.01):
 
     Xsecond = X[firstleng:,:]
     ysecond = y[firstleng:]
-    X = X[0:firstleng,:]
-    y = y[0:firstleng]
-    return X,y,Xsecond,ysecond
+    Xfirst = X[0:firstleng,:]
+    yfirst = y[0:firstleng]
+    return Xfirst, yfirst, Xsecond, ysecond
 
 
 def duration(startTime):
@@ -63,17 +63,30 @@ def duration(startTime):
     passedTime = "%dh%d'%d''" % (hour, minute, second)
     return passedTime
 
-#write info to log file
-def log(info,logfilename=logfilename):
+
+def log(info, logfilename=logfilename):
+    """
+    write info to log file
+    :param info:
+    :param logfilename:
+    :return:
+    """
     with gfile.Open(logfilename,'a+') as logfileid:
         logfileid.write(info)
         print ("%s" %info)
 
-#get roc_auc for predicted data with label =1
+
 def get_roc_auc(y_true,y_pred_prob):
-    fpr,tpr,thresholds= roc_curve(y_true,y_pred_prob[:,1])
-    roc_auc = auc(fpr,tpr)
+    """
+    get roc_auc for predicted data with label = 1
+    :param y_true:  y_true label(0 or 1)
+    :param y_pred_prob:
+    :return:
+    """
+    fpr, tpr, thresholds= roc_curve(y_true,y_pred_prob[:,1])
+    roc_auc = auc(fpr, tpr)
     return roc_auc
+
 
 def printConfusionMatrix(cm):
     """
@@ -90,7 +103,7 @@ def printConfusionMatrix(cm):
 
     :return: a string of above format
     """
-    N1=0.0     # the total element number of truelabel is not 1
+    N1 = 0.0     # the total element number of truelabel is not 1
     output="\n               "
     row,col= cm.shape
     for j in range(col):
@@ -102,14 +115,14 @@ def printConfusionMatrix(cm):
             output +="  % 9d" %cm[i][j]
         if i!=1:
             N1 = N1+cm[i, :].sum()  # the sum of  truelabel!=1
-        else:   #  i == 1, for those truelabel=1 data, calculate its tpr and fpr
+        else:   # i == 1, for those truelabel=1 data, calculate its tpr and fpr
             FP1=cm[:,i].sum()-cm[i,i]    # for all predict=1 data, minus true positive cm[1,1]
             TP1=cm[i,i]
             P1=cm[i,:].sum()   # the sum of the truelabel=1
         output+="\n"
     FPR1=float(FP1)/N1
     TPR1=float(TP1)/P1
-    output+="FPR(1)=%0.4f, TPR(1)=%0.4f\n"%(FPR1,TPR1)
+    output += "FPR(1)=%0.4f, TPR(1)=%0.4f\n"%(FPR1, TPR1)
     return output
 
 # visualize  the batch features in both a scatter subplot to

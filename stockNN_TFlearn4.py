@@ -130,8 +130,6 @@ def main():
         else:
             log("Test data unchanged from last row, skip reloading test data from files,reusing the last one")
 
-        y = training_set.target
-        y_test = test_set.target
         dp = DataPreprocess(hpDict['Preprocessor'])
         if not preProcessChanged:
             if trainDataChanged:
@@ -139,7 +137,9 @@ def main():
                     'preprocessor to a different training data from last run' % seqid)
                 dp.fit(training_set)
                 X = dp.transform(training_set)
+                y = training_set.target
                 X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data
+                y_test = test_set.target
                 # for debugging purpose, plot any  feature ids for manually checking their values after transform
                 #plotFeatures(X, training_set.featurenames, [0,1,2,43,112],
                 #             hpDict['Preprocessor']+hpDict["TFromDate"] + '/' + hpDict["TToDate"],
@@ -148,6 +148,7 @@ def main():
                 log('\nSeqno %d : preProcess is required to be reapply on test data only,since we need to apply a '
                     'preprocessor to a different test data from last run' % seqid)
                 X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data
+                y_test = test_set.target
             else:
                 log("\nSeqno %d : Skip preprocess since this is the same training, "
                     "test data and preprocessor as last time,"
@@ -157,7 +158,9 @@ def main():
                 ' different preprocessor from last run' % seqid)
             dp.fit(training_set)
             X = dp.transform(training_set)
+            y = training_set.target
             X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data
+            y_test = test_set.target
             # for debugging purpose, plot any  feature ids for manually checking their values after transform
             #plotFeatures(X, training_set.featurenames, [0,1,2,43,112],
             #            hpDict['Preprocessor'] + hpDict["TFromDate"] + '/' + hpDict["TToDate"],
@@ -169,8 +172,10 @@ def main():
         # is in capturing the training set data's core attributes
         # it's a good way to judge if the model is overfit, if training auc  >> training_dev auc.
 
-        X,y = datasetShuffle(X,y)
-        X,y,X_traindev,y_traindev = datasetSplit(X,y,splitRate=0.01)
+        if trainDataChanged or preProcessChanged:
+            X,y = datasetShuffle(X,y)
+            #  print ('skip datashuffle, this time =========================> compare with shuffle')
+            X_train,y_train,X_traindev,y_traindev = datasetSplit(X,y,splitRate=0.01)
 
         # try pca
         # X_test = pca.transform(X_test)
@@ -178,7 +183,7 @@ def main():
         tf.reset_default_graph()
         try:
             mymodel = DnnModel(hpDict)
-            mymodel.train(X, y, X_test, y_test)
+            mymodel.train(X_train, y_train, X_test, y_test)
 
             # save the whole model including its data preprocess method and datascaler in disk,
             # remember its location in a file, so that it can be loaded later
@@ -186,8 +191,8 @@ def main():
             modelStore.save(hpDict, mymodel, dp)
 
             # evaluate the model with training/test set,save result to DNN_Training_result.
-            modelStore.evaluate(seqid,mymodel,dp,X,y,X_traindev,y_traindev,"TrainDev")
-            modelStore.evaluate(seqid, mymodel, dp, X, y, X_test, y_test,"TestSet")
+            modelStore.evaluate(seqid,mymodel,dp,X_train,y_train,X_traindev,y_traindev,"shuffleTrainDev")
+            modelStore.evaluate(seqid, mymodel, dp, X_train, y_train, X_test, y_test,"TestSet")
 
             # calculate the duration of this loop, update record
             loopElapsedTime = duration(loopstartTime)

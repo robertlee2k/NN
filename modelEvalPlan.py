@@ -3,6 +3,7 @@ import csv,os,datetime
 from utility import log
 from hyperParam import supportedSkip, DATAFILE_RANGE
 
+
 class ModelEvalPlan(object):
     _instance = None
 
