@@ -7,7 +7,7 @@ import time
 import datetime
 
 from testResult import TestResult
-from utility import log, get_roc_auc, printConfusionMatrix
+from utility import log, get_roc_auc, printConfusionMatrix,plotSample
 from dnnModel import DnnModel
 from preprocess import DataPreprocess
 from plot_tflearn_roc_auc import plot_tflearn_ROC  # for plotting ROC curve
@@ -74,6 +74,38 @@ def evalprint(model, X_predict, y_true, title,
                      annotate, drawplot)
     return aucValue, testAccuracy, nullAccuracy
 
+
+def errorAnalysis(model, X_predict, y_true, title, plotnum=10):
+    """
+    :param model: model instance to be used to predict
+    :param X_predict:  input dataset X,
+    :param y_true:  ground truth of the dataset's y labels
+    :param title: Any string text to be displayed as the title of the subplot
+    :param plotnum: how many samples to plot
+    """
+    log('\nploting errorAnalysis with the model using  %s in progress... time:%s' % (title,(time.ctime())))
+    assert (isinstance(model, DnnModel))
+    predicted = model.model.predict(X_predict)
+
+    # get the index of the largest possibility value of predicted list as the label of prediction
+    verdictVector = np.argmax(predicted, axis=1)
+    count=0
+    for m in range(X_predict.__len__()):
+        if verdictVector[m] != y_true[m]:   # this is a wrong prediction
+            count += 1
+            if count <= plotnum:
+                plotSample(X_predict[m],predicted[m],verdictVector[m],y_true[m],title + str(m),savePlotToDisk=True)
+                # keyp = raw_input("\nPlease press any key to continue to the next sample (x to quit)")
+                # if (keyp != 'x'):
+                #     continue
+                # else:
+                #     break
+            else:
+                log("complete %d samples' prediction error plotting" %(count-1))
+                break
+
+
+   # return aucValue, testAccuracy, nullAccuracy
 
 
 class ModelStore(object):
@@ -162,16 +194,17 @@ class ModelStore(object):
         with open(fullpath, 'wb') as f:
             pickle.dump(hpDict, f)
 
-    def getModelFullpath(self, fromDate, toDate, minAuc='0.55'):
+    def getModelFullpath(self, fromDate, toDate, minAuc='0.55',maxAuc='1'):
         """
         get the unique Runid,compose the fullpathname
         :param fromDate:
         :param toDate:
         :param minAuc: minimum Auc
+        :param maxAuc: maximum Auc
         :return: a list that contains the fullpath of all matched models
         """
-        # search a lookup table, DNN_Training_result, using 3 parameters: fromDate,toDate
-        # and minAuc to locate its unique location in disk
+        # search a lookup table, DNN_Training_result, using 4 parameters: fromDate,toDate
+        #  minAuc and maxAuc to locate its unique location in disk
         # open the csv file to search , if found, return the location, otherwise,return None
         lookupTable = TestResult(self.testRecordName)
         try:
@@ -187,7 +220,8 @@ class ModelStore(object):
             toDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
 
             if start == stDate and end == toDate:  # found a matched training from/to date
-                if float(row['AUC(Test)']) >= float(minAuc):
+                if float(row['AUC(Test)']) >= float(minAuc) \
+                   and float(row['AUC(Test)']) <= float(maxAuc):
                     self.matchedModelLocations.append(row['Model Location'])
 
         # remove duplicate

@@ -125,6 +125,97 @@ def printConfusionMatrix(cm):
     output += "FPR(1)=%0.4f, TPR(1)=%0.4f\n"%(FPR1, TPR1)
     return output
 
+
+def plotSample(Xsample,predictedProb,predict_y,y_true,desc,savePlotToDisk=False):
+    """
+
+    :param Xsample: one single sample of X, 1 X n_features
+    :param predictedProb:  predicted probability of this X sample,  1 X 2 classes
+    :param predict_y:  predicted label of this X sample, 1 X 1
+    :param y_true:  the ground truth label of this X sample  1X 1
+    :param desc: a string of description
+    :return: none
+
+    """
+    if desc is not None:
+        desc = str(desc.split('/'))  # remove the possible '/' and convert it to a string
+    xscatter=[]   # hold the x axis coordinates, which is column id#
+    yscatter=[]   # hold a tuple with (minvalue,maxvalue) for that x
+    n_feature= Xsample.shape[0]
+    nprob_class= predictedProb.shape[0]
+
+    # get and fill  min and max value for each features,prepare data for scatter plotting later
+    for j in range(n_feature):
+        y = Xsample[j]  # fetch all items in this column
+        xscatter.append(j)
+        yscatter.append(y)
+
+
+
+
+    featureFig = plt.figure("plotSample", figsize=(10, 8))
+
+    axs = featureFig.add_subplot(1, 1, 1)  # show the scatter subplot for Xsample value of all the features.
+    axs.clear()
+
+    for j in range(nprob_class):    # appending the predicted probility to x axis after the last x feature.
+        xscatter.append(j+n_feature)
+        yscatter.append(predictedProb[j])
+        axs.annotate('predict label=' + str(j) + ' prob:%0.2f' % predictedProb[j],
+                     xy=(j+n_feature, predictedProb[j]), xycoords='data',
+                     xytext=(20*(1+j), 30*(1+j)), textcoords='offset points',
+                     arrowprops=dict(facecolor='black', arrowstyle='->'),
+                     horizontalalignment='right', verticalalignment='bottom')
+    labels='correct prediction'
+    if predict_y == 0 and y_true == 1:  # let go a positive label,
+        colors ='blue'
+        markers = 'o'
+        labels = "true label=1, predict label=0"
+    elif predict_y == 1 and y_true == 0: # forecast a negative sample to be a positive label,horrible
+        colors = 'red'
+        markers = 'x'
+        labels = "true label=0, predict label=1"
+    elif predict_y == 1 and y_true == 1:  # good catch
+        colors = 'green'
+        markers = 'o'
+    else:                                  #good prediction for true label=0 sample
+        colors = 'black'
+        markers = 'o'
+    axs.scatter(xscatter,yscatter,label=labels,color=colors,s=25,marker=markers)
+    axs.grid(True)
+
+
+    # at first, convert [ (min1,max1), (min2,max2), ....(minn,maxn)] to [(min1,min2,...minn),(max1,max,...maxn)]
+    # ycoord = zip(*yscatter)
+    # for i, colors, names, markers in zip([0, 1], ['red', 'blue'], ['min', 'max'], ['x', 'o']):
+    #     axs.scatter(xscatter, list(ycoord[i]), label=names, color=colors, s=25, marker=markers)
+
+    axs.set_xlabel('feature id# ( the last 2 data in X Axis is probability of predict this to label=0 and label=1)')
+    axs.set_ylabel('actual value ')
+    axs.set_title(
+        "scatter X sample values for " + desc)
+
+    # if scatterAdjust == True:
+    #     # adjust Y scale to show this column's min and max scatter point in the graph,at the cost of possibly sacrifice other columns
+    #     if y.max() > 0:
+    #         ymax = y.max() * 1.2
+    #     else:
+    #         ymax = y.max() * 0.8
+    #     if y.min() > 0:
+    #         ymin = y.min() * 0.8
+    #     else:
+    #         ymin = y.min() * 1.2
+    #     axs.set_ylim(ymin, ymax)
+
+
+    axs.legend()
+
+    #plt.show()
+    if savePlotToDisk:
+        plt.savefig(desc  + ".png", figsize=(10, 8))
+    plt.close(featureFig)  # close figures explicitly to release memory
+
+
 # visualize  the batch features in both a scatter subplot to
 # review the min-max range of the features in a whole picture
 # and a subplot of histogram for each features' distribution

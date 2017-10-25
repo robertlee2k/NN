@@ -174,7 +174,7 @@ def main():
 
         if trainDataChanged or preProcessChanged:
             X,y = datasetShuffle(X,y)
-            #  print ('skip datashuffle, this time =========================> compare with shuffle')
+            #log ('skip datashuffle, this time =========================> compare with shuffle runid: ZN6AQ5 ')
             X_train,y_train,X_traindev,y_traindev = datasetSplit(X,y,splitRate=0.01)
 
         # try pca
@@ -191,7 +191,7 @@ def main():
             modelStore.save(hpDict, mymodel, dp)
 
             # evaluate the model with training/test set,save result to DNN_Training_result.
-            modelStore.evaluate(seqid,mymodel,dp,X_train,y_train,X_traindev,y_traindev,"shuffleTrainDev")
+            modelStore.evaluate(seqid,mymodel,dp,X_train,y_train,X_traindev,y_traindev,"NonshuffleTrainDev")
             modelStore.evaluate(seqid, mymodel, dp, X_train, y_train, X_test, y_test,"TestSet")
 
             # calculate the duration of this loop, update record

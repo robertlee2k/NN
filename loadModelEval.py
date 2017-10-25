@@ -28,7 +28,7 @@ import time
 from utility import log, plotFeatures,duration
 from fetchData import FetchData
 from hyperParam import supportedSkip
-from modelStore import ModelStore
+from modelStore import ModelStore,errorAnalysis
 from modelEvalPlan import ModelEvalPlan
 
 loadEvalPlan = "ModelLoadEvalPlan.csv"
@@ -37,9 +37,10 @@ loadEvalPlan = "ModelLoadEvalPlan.csv"
 # TToDate   :  specify the toDate of a model that is trained using data to this date
 # TestFromD :  specify the fromDate of a TestData set
 # TestToD   :  specify the toDate of a TestData set
-# AUC(Test) :   minimum AUC(Test) in DNN_Training_results.csv that a model has the TFromDate/TToDate
-# Seqno	Skip	TFromDate	TToDate	    TestFromD	TestToD	    AUC(Test)
-# 0	    N	    2011/01/01	2016/12/31	2017/01/01	2017/09/19	0.6
+# MinAUC(Test) :   minimum AUC(Test) in DNN_Training_results.csv that a model has the TFromDate/TToDate
+# MaxAUC(Test) : maximum AUC(Test)
+# Seqno	Skip	TFromDate	TToDate	    TestFromD	TestToD	    MinAUC(Test) MaxAUC(Test)
+# 0	    N	    2011/01/01	2016/12/31	2017/01/01	2017/09/19	0.6             0.8
 
 def main():
     """
@@ -102,13 +103,14 @@ def main():
         #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
 
         # looking for required model and its accompanied dpp,hyperparam instance
-        log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Test) is at least %s"
-            % (seqid, itemDict['TFromDate'],itemDict['TToDate'],itemDict['AUC(Test)']))
+        log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Test) is between %s and %s"
+            % (seqid, itemDict['TFromDate'],itemDict['TToDate'],itemDict['MinAUC(Test)'],itemDict['MaxAUC(Test)']))
         try:
             modelst = ModelStore()
             modelst.getModelFullpath(itemDict['TFromDate'],
                                      itemDict['TToDate'],
-                                     itemDict['AUC(Test)'])
+                                     itemDict['MinAUC(Test)'],
+                                     itemDict['MaxAUC(Test)'])
             if modelst.matchedModelLocations == []:
                 log("Bypass this iteration since no satisfactory trainined model can be found from"
                     " %s" % modelst.testRecordName)
@@ -151,6 +153,8 @@ def main():
                     log("\nthe time of loading the model/evaluating the model is %s" % loopElapsedTime)
                     modelst.writeResult(seqid, modelst.hpDict, modelst.loadmymodel, st, time.ctime(), loopElapsedTime)
 
+                    # visualize first 10 samples that have been wrongly classified for human review
+                    errorAnalysis(modelst.loadmymodel, X_test, y_test, "Test data error analysis",10)
                 except ValueError as ve:
                     log("Value Exception happened,bypass this iteration")
                     log(ve.message)
