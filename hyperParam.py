@@ -3,7 +3,7 @@ import csv
 import os
 import datetime
 
-from utility import log
+from utility import log,isIntersection
 
 
 DATAFILE_RANGE = {"mindate": datetime.datetime.strptime("2005/01/01","%Y/%m/%d"),
@@ -29,10 +29,12 @@ class HyperParam(object):
         self.lastTFromDate = 'Initial'
         self.lastTToDate = 'Initial'
         self.lastTestFromD = self.lastTestToD = 'Initial'
+        self.validationdays="Initial"
 
         self.preProcessorChanged = True
         self.trainDataChanged=True
         self.testDataChanged=True
+        self.validationdaysChanged=True
 
         log("\nLoading and parsing file:%s" %filename)
         if os.path.exists(self.filename):
@@ -80,7 +82,20 @@ class HyperParam(object):
                     else:
                         self.testDataChanged = False
 
-                return self.preProcessorChanged, self.trainDataChanged, self.testDataChanged, row
+                    if row['ValidationDays'] != self.validationdays:
+                        self.validationdays = row['ValidationDays']
+                        self.validationdaysChanged = True
+                    else:
+                        self.validationdaysChanged = False
+
+                    #append ValidationSetDate and append to row
+                    stDate = datetime.datetime.strptime(row["TestFromD"], "%Y/%m/%d")
+                    stValidationDate = stDate - datetime.timedelta(int(row['ValidationDays']))
+                    toValidationDate = stDate - datetime.timedelta(1)
+                    row["ValidationFromD"] = datetime.datetime.strftime(stValidationDate,"%Y/%m/%d")
+                    row["ValidationToD"] = datetime.datetime.strftime(toValidationDate,"%Y/%m/%d")
+                return self.validationdaysChanged,self.preProcessorChanged, \
+                       self.trainDataChanged, self.testDataChanged, row
 
         raise ValueError("rowid doesn't exist in search plan %s" % self.filename)
 
@@ -104,11 +119,11 @@ class HyperParam(object):
                 # try conversion, if the raw data is in wrong format, the following will generate ValueError exception
                 # time data 'xxxxxx' does not match format '%Y/%m/%d'
                 # which will be captured by except clause
-                stDate = datetime.datetime.strptime(row["TFromDate"], "%Y/%m/%d")
-                toDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
-                if stDate >= toDate:
+                stTrainDate = datetime.datetime.strptime(row["TFromDate"], "%Y/%m/%d")
+                toTrainDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
+                if stTrainDate >= toTrainDate:
                     raise ValueError("TFromDate could not be later than TToDate in Seqno %s," % row['Seqno'])
-                if stDate < DATAFILE_RANGE['mindate'] or toDate > DATAFILE_RANGE['maxdate']:
+                if stTrainDate < DATAFILE_RANGE['mindate'] or toTrainDate > DATAFILE_RANGE['maxdate']:
                     raise ValueError("TFromDate or TToDate is beyond the available datafile range"
                                      " [%s - %s] in seq %s" % (DATAFILE_RANGE['mindate'],
                                                            DATAFILE_RANGE['maxdate'],
@@ -125,7 +140,25 @@ class HyperParam(object):
                                                            row['Seqno']))
                 tmp = int(row['Seqno'])+int(row['decaystep'])+int(row['RS'])+int(row['Epoch'])+int(row['Minibatch'])\
                     + int(row["HiddenLayer"]) + int(row['HiddenUnit'])
-                tmp = float(row['Alpha'])+float(row['lrdecay'])+float(row['KeepProb'])+float(row['InputKeepProb'])
+                tmp = float(row['Alpha'])+float(row['lrdecay'])
+                tmp = float(row['KeepProb'])
+                if tmp < 0.1  or tmp > 1.0:
+                    raise ValueError("in Seq %s: KeepProb must be a float between 0.01 and 1.0" % row['Seqno'])
+                tmp = float(row['InputKeepProb'])
+                if tmp < 0.1  or tmp > 1.0:
+                    raise ValueError("in Seq %s: InputKeepProb must be a float between 0.01 and 1.0" % row['Seqno'])
+
+                valday = int(row['ValidationDays'])
+                if valday <=0:
+                    raise ValueError("in Seq %s: ValidationDays must be a integer that's greater than 0" %row['Seqno'])
+
+                # make sure the validation period, Test period, and training period do NOT have intersections
+                stValidationDate = stDate - datetime.timedelta(int(row['ValidationDays']))
+                toValidationDate = stDate - datetime.timedelta(1)
+                if isIntersection(stTrainDate,toTrainDate,stDate,toDate) or \
+                   isIntersection(stTrainDate,toTrainDate,stValidationDate,toValidationDate) :
+                    raise ValueError("Invalid setting: in Seqno %s:[TestFromD-TestToD],[TFromDate-TToDate],"
+                                     "Validationdays overlaps." % row['Seqno'])
             except ValueError as e:
                 log(e.message)
                 log("Fatal Error: wrong data in seq %s" %(row['Seqno']))

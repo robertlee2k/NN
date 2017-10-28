@@ -59,7 +59,6 @@ def main():
     # return
 
     runStartTime = time.time()  # start time in ms.
-    st = time.ctime()  # time in date/time format
 
     # instantiate a HyperParam class to read  hyperparameter search plan into a list
     # do sanity check to make sure all input parameters are valid before going further
@@ -76,11 +75,13 @@ def main():
         return
     else:
         log("\n sanity check on search plan file(%s) PASSED " % hyperParamSetFile)
-
-    for seqid in range(0, hpIns.rows.__len__()):
+    total_loop = hpIns.rows.__len__() -1
+    for seqid in range(0, total_loop):
         loopstartTime = time.time()  # start time in ms.
+        st = time.ctime()  # time in date/time format
+        log ("=============================   seqid %d out of %d  starts at %s ================================" %(seqid, total_loop,st))
         try:
-            preProcessChanged, trainDataChanged, testDataChanged, hpDict = hpIns.readRow(rowId=seqid)
+            validationDaysChanged,preProcessChanged, trainDataChanged, testDataChanged, hpDict = hpIns.readRow(rowId=seqid)
         except ValueError as e:
             log("WARNING: exception captured")
             log(e.message)
@@ -130,39 +131,69 @@ def main():
         else:
             log("Test data unchanged from last row, skip reloading test data from files,reusing the last one")
 
+        if validationDaysChanged or testDataChanged:
+            log("\nloading %s days' validation data from:%s to:%s in progress ... time:%s"
+                % (hpDict['ValidationDays'],hpDict['ValidationFromD'], hpDict['ValidationToD'], time.ctime()))
+
+            try:
+                validation_set = fd.loadData(hpDict['ValidationFromD'], hpDict['ValidationToD'])
+            except ValueError as e:
+                print('=' * 30 + "ValueError Exception happened:" + '=' * 30)
+                print(e)
+                print('=' * 30 + "end of print ValueError exception" + '=' * 30)
+                log("ValueError occurred in loading validation data, skip this iteration")
+                continue
+                # plot original validation set to review
+                # plotFeatures(validation_set.data,validation_set.featurenames,[0, 1, 2],
+                #   hpDict['ValidationFromD']+ '/' + hpDict['ValidationToD'],savePlotToDisk=True,scatterAdjust=False)
+        else:
+            log("Validation data unchanged from last row, skip reloading validation data from files,reusing the last one")
+
         dp = DataPreprocess(hpDict['Preprocessor'])
         if not preProcessChanged:
             if trainDataChanged:
-                log('\nSeqno %d : preProcess is required to be reapply,since we need to apply a '
+                log('\nSeqid %d : preProcess is required to be reapply,since we need to apply a '
                     'preprocessor to a different training data from last run' % seqid)
                 dp.fit(training_set)
                 X = dp.transform(training_set)
                 y = training_set.target
+                X_val = dp.transform(validation_set)
+                y_val = validation_set.target
                 X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data
                 y_test = test_set.target
+
                 # for debugging purpose, plot any  feature ids for manually checking their values after transform
-                #plotFeatures(X, training_set.featurenames, [0,1,2,43,112],
+                # plotFeatures(X, training_set.featurenames, [0,1,2,43,112],
                 #             hpDict['Preprocessor']+hpDict["TFromDate"] + '/' + hpDict["TToDate"],
                 #             savePlotToDisk=True,scatterAdjust=False)
             elif testDataChanged:
-                log('\nSeqno %d : preProcess is required to be reapply on test data only,since we need to apply a '
+                log('\nSeqid %d : preProcess is required to be reapply on both test data and validation data,since we need to apply a '
                     'preprocessor to a different test data from last run' % seqid)
                 X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data
                 y_test = test_set.target
+                X_val = dp.transform(validation_set)
+                y_val = validation_set.target
+            elif validationDaysChanged:
+                log('\nSeqid %d : preProcess is required to be reapply on validation data only,'
+                    'since we need to apply the preprocessor to a different validation data from last run' % seqid)
+                X_val = dp.transform(validation_set)
+                y_val = validation_set.target
             else:
-                log("\nSeqno %d : Skip preprocess since this is the same training, "
-                    "test data and preprocessor as last time,"
-                    "X and X_test have been preprocessed last time" % seqid)
+                log("\nSeqid %d : Skip preprocess since this is the same training, "
+                    "validation, test set and preprocessor as last time,"
+                    "X,X_val and X_test have been preprocessed last time" % seqid)
         else:
-            log('\nSeqno %d : preProcess is required to be reapply,since we need to apply a '
+            log('\nSeqid %d : preProcess is required to be reapply,since we need to apply a '
                 ' different preprocessor from last run' % seqid)
             dp.fit(training_set)
             X = dp.transform(training_set)
             y = training_set.target
-            X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data
+            X_val = dp.transform(validation_set)
+            y_val = validation_set.target
+            X_test = dp.transform(test_set)  # use the same scaler to transform test_set.data and validation_set.data
             y_test = test_set.target
             # for debugging purpose, plot any  feature ids for manually checking their values after transform
-            #plotFeatures(X, training_set.featurenames, [0,1,2,43,112],
+            # plotFeatures(X, training_set.featurenames, [0,1,2,43,112],
             #            hpDict['Preprocessor'] + hpDict["TFromDate"] + '/' + hpDict["TToDate"],
             #           savePlotToDisk=True,scatterAdjust=False)
 
@@ -173,9 +204,9 @@ def main():
         # it's a good way to judge if the model is overfit, if training auc  >> training_dev auc.
 
         if trainDataChanged or preProcessChanged:
+            log("Apply data shuffle on training data,split training data into train and traindev set")
             X,y = datasetShuffle(X,y)
-            #log ('skip datashuffle, this time =========================> compare with shuffle runid: ZN6AQ5 ')
-            X_train,y_train,X_traindev,y_traindev = datasetSplit(X,y,splitRate=0.01)
+            X_train,y_train,X_traindev,y_traindev = datasetSplit(X, y, splitRate=0.01)
 
         # try pca
         # X_test = pca.transform(X_test)
@@ -183,20 +214,26 @@ def main():
         tf.reset_default_graph()
         try:
             mymodel = DnnModel(hpDict)
-            mymodel.train(X_train, y_train, X_test, y_test)
+            mymodel.train(X_train, y_train, X_val, y_val)
 
             # save the whole model including its data preprocess method and datascaler in disk,
             # remember its location in a file, so that it can be loaded later
             modelStore = ModelStore()
             modelStore.save(hpDict, mymodel, dp)
 
-            # evaluate the model with training/test set,save result to DNN_Training_result.
-            modelStore.evaluate(seqid,mymodel,dp,X_train,y_train,X_traindev,y_traindev,"NonshuffleTrainDev")
-            modelStore.evaluate(seqid, mymodel, dp, X_train, y_train, X_test, y_test,"TestSet")
+            # evaluate the model with validaton/test set,save the AUC plots to disk
+            modelStore.evaluate(mymodel, dp, X_val, y_val, X_test, y_test, mode="TestSet")
+            # evaluate the model with Training/training_dev later, in case memory allocation error exception happens
+            modelStore.evaluate(mymodel, dp, X_train, y_train, X_traindev, y_traindev, mode="shuffleTrainDev")
 
-            # calculate the duration of this loop, update record
+
+            # only for debugging, swap the X_test and X_traindev to test if evaluate procedure has bug.2017-10-27 passed test.
+            # modelStore.evaluate(seqid, mymodel, dp, X_train, y_train, X_test, y_test, mode="shuffleTrainDev")
+            # modelStore.evaluate(seqid, mymodel, dp, X_val, y_val, X_traindev, y_traindev, mode="TestSet")
+
+            # calculate the duration of this loop, update record to DNN_Training_result.
             loopElapsedTime = duration(loopstartTime)
-            log("\nthe time of building/training/evaluating the model is %s" % loopElapsedTime)
+            log("\nthe time of loading data,building/training/evaluating the model is %s" % loopElapsedTime)
             modelStore.writeResult(seqid, hpDict, mymodel, st, time.ctime(), loopElapsedTime)
 
             # reduce a reference to instance of DNNModel since its task has come to an end.
@@ -215,47 +252,10 @@ def main():
             log("Exception happened.bypass this iteration")
             log(e.message)
             continue
-        # else:   #only predict and evaluate ,skip training process
-        #     #initiate a empty model, load the weight from the the saved model to reevaluate,double check the model's load function
-        #     log('\nloading test data from file %s from:%s,to:%s in progress ... time:%s'
-        #         % (hpDict["Test"], hpDict["TestFromD"], hpDict["TestToD"], time.ctime()))
-        #     fd = FetchData(hpDict["Test"], hpDict["TestFromD"], hpDict["TestToD"], TestDataStart, TestDataStop)
-        #     try:
-        #         test_set = fd.loadData()
-        #     except ValueError as e:
-        #         print('=' * 30 + "ValueError Exception happened:" + '=' * 30)
-        #         print(e)
-        #         print('=' * 30 + "end of print ValueError exception" + '=' * 30)
-        #         log("ValueError occurred in loading test data, skip this iteration")
-        #         continue
-        #         # plot original test data to review
-        #         # plotFeatures(test_set.data,test_set.featurenames,[1],"Orig17Jan-17Septest",savePlotToDisk=True,scatterAdjust=False)
-        #
-        #
-        #
-        #
-        #     tf.reset_default_graph()
-        #     y_test = test_set.target
-        #     loadmymodel = DnnModel(hpDict,runId+'load'+hpDict['Seqno'])  # use this runId + seqno combination as <runid> to distinguish multiple load models from original model, don't retrain the model
-        #     try:
-        #         loadmymodel.loadModel(hpDict,runId,dataPreprocessDumpfile)         # load its preprocess and datascaler
-        #         X_test= loadmymodel.dpp.transform(test_set)  # use the same scaler to transform test_set.data
-        #     except IOError as ve:  #can't find the trained model from disk
-        #         log(ve.message)
-        #         log("\nWARNING:  Skip this evaluation process ... ")
-        #         continue
-        #     except Exception:    # any other exceptions, just skip this evaluation, not a big deal
-        #         log("\nWARNING:  Exception occurred, skip this evaluation... ")
-        #         continue
-        #     else:
-        #         loadmymodel.evaluateTestSet(hpDict,X_test,y_test) # output the ROC to disk with <runid>load folder name
-        #         log('\nload trained model & reevaluate completed! ')
-        #     del loadmymodel  # delete instance of DNNModel since its task has come to an end. let system to gc it
-        #     del test_set, X_test, y_test
 
     wholetime = duration(runStartTime)
-    log("\nthe WHOLE ELAPSED time of loading data and training all the models is %s"
-        % wholetime)
+    log("\nthe WHOLE ELAPSED time of loading data and training %d models is %s"
+        % (wholetime,total_loop))
 
 
       # keyp = raw_input("\nPlease input a row# to predict: (-1 to quit)")

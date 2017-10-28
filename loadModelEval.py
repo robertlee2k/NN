@@ -55,8 +55,6 @@ def main():
 
     """
     runStartTime = time.time()  # start time in ms.
-    st = time.ctime()  # time in date/time format
-
     # instantiate a ModelEvalPlan class to read all designated trained model+test set combintion
     # plan into a list
     # do sanity check to make sure all parameters in the plan are valid before going further
@@ -76,6 +74,7 @@ def main():
 
     for seqid in range(0, lp.rows.__len__()):
         loopstartTime = time.time()  # start time in ms.
+        st = time.ctime()  # time in date/time format
         try:
             itemDict = lp.readRow(rowId=seqid)
         except ValueError as e:

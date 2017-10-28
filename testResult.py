@@ -21,12 +21,17 @@ class TestResult(object):
     def __init__(self,filename):
         self.columnsname = ["Seqno","RunId","PreProcessor","Optimizer","Regularization",
                           'HiddenLayer','HiddenUnit',"InputKeepProb",
-                          'KeepProb',"Alpha","lrdecay","decaystep","RS",
-                          "AUC(Train)","Loss(Train)","Accuracy(Train)",
-                          "AUC(Test)","Accuracy(Test)","NullAccuracy(Test)",
-                          "Duration","StartTime","EndTime","Epoch","Minibatch",
+                          'KeepProb',"Alpha","lrdecay","decaystep","RS","Epoch","Minibatch",
+                          "AUC(Train)","AUC(Traindev)","AUC(Val)","AUC(Test)",
+                          "Loss(Train)",
+                          "Accuracy(Train)","NullAccuracy(Train)",
+                          "Accuracy(Traindev)","NullAccuracy(Traindev)",
+                          "Accuracy(Val)","NullAccuracy(Val)",
+                          "Accuracy(Test)","NullAccuracy(Test)",
+                          "Duration","StartTime","EndTime",
                           "Model Location",
                           "TFromDate", "TToDate",
+                          'ValidationFromD', 'ValidationToD',
                           'TestFromD', 'TestToD']
         self.rows = []
         self.filename = filename

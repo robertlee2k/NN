@@ -7,7 +7,7 @@ import numpy as np
 
 #the following packages  are part of the project
 from hyperParam import selectedAvgline, DATAFILE_RANGE
-from utility import log
+from utility import log,isIntersection
 
 DATAFILEPATH = "/home/topleaf/stock/tensorFlowData/"
 
@@ -113,23 +113,7 @@ class FetchData(object):
         self.datafilelist = []
 
 
-    def _isIntersection(self,fromDate1,toDate1,fromDate2,toDate2):
-        """
-        check if [fromDate1,toDate1] and [fromDate2,toDate2] has intersection
-        :param fromDate1:
-        :param toDate1:
-        :param fromDate2:
-        :param toDate2:
-        :return:
-        """
-        assert(fromDate1<=toDate1 and fromDate2<=toDate2)
 
-        if toDate2 >= fromDate1 >= fromDate2 or toDate2 >= toDate1 >= fromDate2:
-            return True
-        if fromDate1 <= fromDate2 and toDate1 >= toDate2:
-            return True
-        else:
-            return False
 
     # get datafilelist according to fromDate and toDate
     def _getDatafileFullpath(self,fromDate,toDate):
@@ -145,7 +129,7 @@ class FetchData(object):
         self.datafilelist = []
 
         for filename in DATAFILELIST.keys():
-            if self._isIntersection(stDate,endDate,
+            if isIntersection(stDate,endDate,
                                     DATAFILELIST[filename][0], DATAFILELIST[filename][1]):
                 self.datafilelist.append(''.join((DATAFILEPATH, filename)))
 

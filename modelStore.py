@@ -17,8 +17,10 @@ EXPORT_DIR = "/home/topleaf/stock/savedModel/"  # export dir base
 dppfilename = 'dpp.bin'     # default datapreprocess filename to hold DataPreprocess class dump
 hyperparamfilename = 'hyperParam.bin'  # default filename to hold hpDict
 testResultfile = "DNN_Training_results.csv"  # file to record model training results
-# evalRecordfile = "DNN_ModelEval_results.csv"  # file to record model performance over test sets
 
+# batch size of for prediction , prevent runing out of memory when predict a large set of data
+# total needed memory = predictBatchSize * nodeNumbers * 4
+predictBatchSize = 100000
 
 def evalprint(model, X_predict, y_true, title,
               fig, nrow, ncol, plot_number, annotate=False, drawplot=True):
@@ -35,9 +37,25 @@ def evalprint(model, X_predict, y_true, title,
     :param drawplot: whether or not to plot
     :return: tuple of (Aucvalue, testAccuracy,NullAccuracy of the dataset)
     """
-    log('\nevaluate the DNN classifier %s in progress... time:%s' % (title,(time.ctime())))
+    log('\nevaluate the DNN classifier %s using BatchSize = %d in progress... time:%s'
+        % (title,predictBatchSize,(time.ctime())))
 
-    predicted = model.predict(X_predict)
+
+    fulllength = len(X_predict)
+    batchnum = fulllength / predictBatchSize
+    lastbatch = fulllength % predictBatchSize
+    if batchnum !=0:
+        predicted = model.predict(X_predict[0:predictBatchSize])
+        for batchid in range(1,batchnum):
+            predicted = np.concatenate((predicted, model.predict(X_predict[batchid*predictBatchSize:
+                        batchid*predictBatchSize + predictBatchSize])),axis=0)
+        if lastbatch!=0:
+            predicted = np.concatenate((predicted,model.predict(X_predict[lastbatch*(-1):])),axis=0)
+    else:
+        predicted=model.predict(X_predict)
+
+
+
 
     # get the index of the largest possibility value of predicted list as the label of prediction
     verdictVector = np.argmax(predicted, axis=1)
@@ -75,13 +93,14 @@ def evalprint(model, X_predict, y_true, title,
     return aucValue, testAccuracy, nullAccuracy
 
 
-def errorAnalysis(model, X_predict, y_true, title, plotnum=10):
+def errorAnalysis(model, X_predict, y_true, title, plotnum=10,savePlot=False):
     """
     :param model: model instance to be used to predict
     :param X_predict:  input dataset X,
     :param y_true:  ground truth of the dataset's y labels
     :param title: Any string text to be displayed as the title of the subplot
     :param plotnum: how many samples to plot
+    :param savePlot: True or False, to plot the error classified samples and save the plot to disk under current folder
     """
     log('\nploting errorAnalysis with the model using  %s in progress... time:%s' % (title,(time.ctime())))
     assert (isinstance(model, DnnModel))
@@ -94,7 +113,7 @@ def errorAnalysis(model, X_predict, y_true, title, plotnum=10):
         if verdictVector[m] != y_true[m]:   # this is a wrong prediction
             count += 1
             if count <= plotnum:
-                plotSample(X_predict[m],predicted[m],verdictVector[m],y_true[m],title + str(m),savePlotToDisk=True)
+                plotSample(X_predict[m],predicted[m],verdictVector[m],y_true[m],title + str(m),savePlotToDisk=savePlot)
                 # keyp = raw_input("\nPlease press any key to continue to the next sample (x to quit)")
                 # if (keyp != 'x'):
                 #     continue
@@ -135,12 +154,12 @@ class ModelStore(object):
         self.dpp = None
         self.hpDict = None
         self.loadmymodel = None
-        self.trainAuc = None
-        self.testAuc = None
-        self.testTa = None
-        self.trainTa = None
-        self.trainNa = None
-        self.testNa = None
+        self.trainAuc = self.traindevAuc = None
+        self.testAuc = self.valAuc = None
+        self.testTa = self.valTa = None
+        self.trainTa = self.traindevTa = None
+        self.trainNa = self.traindevNa = None
+        self.testNa = self.valNa = None
 
     # save a trainedModel with its datapreprocessor object to disk, remember its location
     def save(self, hpDict, modelinst, dp):
@@ -163,7 +182,8 @@ class ModelStore(object):
             #             % (hpDict['Preprocessor'], self.runid, self.opt.name,
             #                self.learningrate, self.lrdecay,self.decaystep,
             #                self.epoch,self.minibatch)
-
+        self.hpDict = hpDict
+        self.dpp = dp
         # save the model to disk, using unique runid of this model as folder name
         self.dirname = ''.join((EXPORT_DIR, modelinst.runid))
         if os.path.isfile(self.dirname):
@@ -283,21 +303,22 @@ class ModelStore(object):
                         raise Exception(e.message)
         return self
 
-    def evaluate(self, seqid, modelinst, dp, X, y, X_test, y_test,desc):
+    def evaluate(self, modelinst, dp, X, y, X_test, y_test, mode):
         """
         1.evaluate the model using training data and test data
         2.generate auc,accuracy etc,
         3. generate and plot ROC and save the plt file
         4. append the test result to csv file
 
-        :param : desc is a description for this plot, will be used in plotfilename
+        :param : mode is a description for this plot, will be used in plotfilename
         :return: None
         """
 
         log("Evaluate the trained model,save its plot")
-        assert(isinstance(modelinst, DnnModel))
-        assert (isinstance(dp, DataPreprocess))
-
+        if not isinstance(modelinst, DnnModel):
+            assert ("input parameter(%s) must be a instance of %s" % (modelinst, DnnModel.__class__.__name__))
+        if not isinstance(dp, DataPreprocess):
+            assert ("input parameter(%s) must be a instance of %s" % (dp, DataPreprocess.__class__.__name__))
         try:
             figTitle = "Runid_%s_%s_%s_epoch%d_minibatch%d" \
                        % (modelinst.runid, dp.preScalerClassName, modelinst.opt.name,
@@ -305,19 +326,34 @@ class ModelStore(object):
             figid = plt.figure(figTitle, figsize=(10, 8))
             figid.subplots_adjust(top=0.95, left=0.12, right=0.90, hspace=0.43, wspace=0.2)
 
-            # evaluate the model with Training data
-            self.trainAuc,self.trainTa, self.trainNa = evalprint(modelinst.model, X, y,
-                                                   "with Training data(Runid=%s),training loss=%0.4f"
-                                                   % (modelinst.runid, modelinst.model.trainer.training_state.global_loss),
-                                                   figid, 2, 1, 1, False, True)
+            if mode == 'shuffleTrainDev':
+                # evaluate the model with Training data
+                self.trainAuc, self.trainTa, self.trainNa = \
+                    evalprint(modelinst.model, X, y,"with Training data From %s to %s,(Runid=%s),training loss=%0.4f"
+                              % (self.hpDict['TFromDate'], self.hpDict['TToDate'],
+                                 modelinst.runid, modelinst.model.trainer.training_state.global_loss),
+                              figid, 2, 1, 1, False, True)
 
-            # evaluate the model with Test data
-            self.testAuc, self.testTa, self.testNa = evalprint(modelinst.model, X_test, y_test, "with data " + desc,
-                                                               figid, 2, 1, 2, annotate=True, drawplot=True)
+                # evaluate the model with Training_dev data
+                self.traindevAuc, self.traindevTa, self.traindevNa = \
+                    evalprint(modelinst.model, X_test, y_test, "with 1% additinal data as " + mode,
+                              figid, 2, 1, 2, annotate=True, drawplot=True)
+            elif mode == "TestSet":
+                # evaluate the model with Validation data
+                self.valAuc, self.valTa, self.valNa = \
+                    evalprint(modelinst.model, X, y,"with %s day(s) Validation data(From %s to %s)"
+                              % (self.hpDict['ValidationDays'],
+                                 self.hpDict['ValidationFromD'], self.hpDict['ValidationToD']),
+                              figid, 2, 1, 1, False, True)
+                # evaluate the model with Test data
+                self.testAuc, self.testTa, self.testNa = \
+                    evalprint(modelinst.model, X_test, y_test, "with test data(From %s to %s) "
+                              % (self.hpDict['TestFromD'], self.hpDict['TestToD']),
+                              figid, 2, 1, 2, annotate=True, drawplot=True)
 
             # update test result  to file
             plotName = "%s_%s_%s_alpha%0.4f_epoch%d_%d.png"\
-                       % (desc, dp.preScalerClassName, modelinst.opt.name, modelinst.learningrate,
+                       % (mode, dp.preScalerClassName, modelinst.opt.name, modelinst.learningrate,
                           modelinst.epoch, modelinst.minibatch)
             fullpath = ''.join((EXPORT_DIR, modelinst.runid))
             if os.path.isfile(fullpath):
@@ -367,41 +403,61 @@ class ModelStore(object):
                       "%0.4f" % modelinst.lrdecay,
                       "%0.4f" % modelinst.decaystep,
                       "%d" % modelinst.rs,
+                      str(modelinst.epoch), str(modelinst.minibatch),
                       "%0.4f" % self.trainAuc,
+                      "%0.4f" % self.traindevAuc,
+                      "%0.4f" % self.valAuc,
+                      "%0.4f" % self.testAuc,
                       "%0.4f" % modelinst.model.trainer.training_state.global_loss,
                       "%0.2f" % (self.trainTa * 100) + '%',
-                      "%0.4f" % self.testAuc,
+                      "%0.2f" % (self.trainNa * 100) + '%',
+                      "%0.2f" % (self.traindevTa * 100) + '%',
+                      "%0.2f" % (self.traindevNa * 100) + '%',
+                      "%0.2f" % (self.valTa * 100) + '%',
+                      "%0.2f" % (self.valNa * 100) + '%',
                       "%0.2f" % (self.testTa * 100) + '%',
                       "%0.2f" % (self.testNa * 100) + '%',
                       duration,
                       "%s" % st,
-                      "%s" % endt, str(modelinst.epoch), str(modelinst.minibatch), self.dirname,
+                      "%s" % endt,  self.dirname,
                       hpDict["TFromDate"], hpDict["TToDate"],
+                      hpDict['ValidationFromD'], hpDict['ValidationToD'],
                       hpDict['TestFromD'], hpDict['TestToD']]
         else:
             # update test result  to file according to above column sequence
-            # training auc,loss, training accuracy are NA,since model is reload from disk,no training
+            # training auc,loss, training accuracy,training null accuracy,
+            # trainingdev auc, trainingdev accuracy,null accuracy
+            # Val auc, val accuracy and val null accuracy are NA,since model is reload from disk,no training
             result = [seqid, modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
-                  modelinst.regularization,
-                  "%02d" % modelinst.hiddenLayer,
-                  "%d" % modelinst.hiddenUnit,
-                  "%0.2f" % modelinst.inputKeepProb,
-                  "%0.2f" % modelinst.keepProb,
-                  "%0.4f" % modelinst.learningrate,
-                  "%0.4f" % modelinst.lrdecay,
-                  "%0.4f" % modelinst.decaystep,
-                  "%d" % modelinst.rs,
-                  "NA",
-                  "NA",
-                  "NA",
-                  "%0.4f" % self.testAuc,
-                  "%0.2f" % (self.testTa * 100) + '%',
-                  "%0.2f" % (self.testNa * 100) + '%',
-                  duration,
-                  "%s" % st,
-                  "%s" % endt, str(modelinst.epoch), str(modelinst.minibatch), self.dirname,
-                  hpDict["TFromDate"], hpDict["TToDate"],
-                  hpDict['TestFromD'], hpDict['TestToD']]
+                      modelinst.regularization,
+                      "%02d" % modelinst.hiddenLayer,
+                      "%d" % modelinst.hiddenUnit,
+                      "%0.2f" % modelinst.inputKeepProb,
+                      "%0.2f" % modelinst.keepProb,
+                      "%0.4f" % modelinst.learningrate,
+                      "%0.4f" % modelinst.lrdecay,
+                      "%0.4f" % modelinst.decaystep,
+                      "%d" % modelinst.rs,
+                      str(modelinst.epoch), str(modelinst.minibatch),
+                      "NA",
+                      "NA",
+                      "NA",
+                      "%0.4f" % self.testAuc,
+                      "NA",
+                      "NA",
+                      "NA",
+                      "NA",
+                      "NA",
+                      "NA",
+                      "NA",
+                      "%0.2f" % (self.testTa * 100) + '%',
+                      "%0.2f" % (self.testNa * 100) + '%',
+                      duration,
+                      "%s" % st,
+                      "%s" % endt,  self.dirname,
+                      hpDict["TFromDate"], hpDict["TToDate"],
+                      hpDict['ValidationFromD'], hpDict['ValidationToD'],
+                      hpDict['TestFromD'], hpDict['TestToD']]
 
         trackRecord = TestResult(self.testRecordName)
         trackRecord.append(result)

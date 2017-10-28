@@ -8,6 +8,30 @@ import matplotlib.pyplot as plt
 
 logfilename = "/tmp/stockNN2.log"
 
+
+def isIntersection(fromDate1, toDate1, fromDate2, toDate2):
+    """
+    check if [fromDate1,toDate1] and [fromDate2,toDate2] has intersection
+    :param fromDate1:  in the format of stDate = datetime.datetime.strptime(fromDate, "%Y/%m/%d")
+    :param toDate1:                 datetime.datetime.strptime(toDate, "%Y/%m/%d")
+    :param fromDate2:
+    :param toDate2:
+    :return:
+    """
+    assert (fromDate1 <= toDate1 and fromDate2 <= toDate2)
+
+    if toDate2 >= fromDate1 >= fromDate2 or toDate2 >= toDate1 >= fromDate2:
+        return True
+    if fromDate1 <= fromDate2 and toDate1 >= toDate2:
+        return True
+    else:
+        return False
+
+# import tflearn.data_utils
+#
+# tflearn.data_utils.shuffle()
+
+
 def datasetShuffle(X, y):
     """
     shuffle the dataset of  ndarray

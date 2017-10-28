@@ -80,7 +80,7 @@ class DnnModel(object):
         net = tflearn.regression(net, optimizer=self.opt, loss='categorical_crossentropy', metric=acc,
                                  to_one_hot=True, n_classes=2)
 
-        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_27thlogs/", tensorboard_verbose=0)
+        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_28thlogs/", tensorboard_verbose=0)
 
         self.model = model
 
@@ -99,13 +99,15 @@ class DnnModel(object):
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
         net = tflearn.input_data([None, 165], data_preprocessing=None, data_augmentation=None, name="inputlayer")
-        net = tflearn.dropout(net, keep_prob=self.inputKeepProb, noise_shape=None, name='dropoutlayer0')
+        if self.inputKeepProb != 1.0:
+            net = tflearn.dropout(net, keep_prob=self.inputKeepProb, noise_shape=None, name='dropoutlayer0')
 
         for l in range(self.hiddenLayer):
             net = tflearn.fully_connected(net, self.hiddenUnit, activation='relu', weights_init=xavierInit,
                                           bias_init=normalInit, regularizer=self.regularization,
                                           weight_decay=0.001, name='hidderlayer%02d' % (l+1))
-            net = tflearn.dropout(net, keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer%02d' % (l+1))
+            if self.keepProb != 1.0:
+                net = tflearn.dropout(net, keep_prob=self.keepProb, noise_shape=None, name='dropoutlayer%02d' % (l+1))
 
         net = tflearn.fully_connected(net, 2, activation='softmax', weights_init=xavierInit, bias_init=normalInit,
                                       name='outputlayer')
