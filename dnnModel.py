@@ -30,7 +30,7 @@ class DnnModel(object):
             DnnModel.__instance = object.__new__(cls, *args, **kwargs)
         return DnnModel.__instance
 
-    def __init__(self, hpDict):
+    def __init__(self, hpDict,n_inputLayerNode):
         log('\n %s : After applying %s preprocessor %s,regularization=%s,hiddenLayer=%s,hiddenUnit=%s,inputKeepProb=%s,\
             keep_prob=%s building the DNN Model(rs=%s,alpha=%s,decayrate=%s,decaystep=%s) for %s epoches with mini_batch size of %s in progress ... time:%s'
             % (hpDict['Seqno'], hpDict['Preprocessor'], hpDict['Optimizer'],
@@ -51,6 +51,7 @@ class DnnModel(object):
         self.hiddenUnit=int(hpDict['HiddenUnit'])
         self.inputKeepProb=float(hpDict['InputKeepProb'])
         self.dpp = None
+        self.inputlayernodenum = n_inputLayerNode
 
         assert hpDict['Regularization'] in supportedRegularization
 
@@ -80,7 +81,7 @@ class DnnModel(object):
         net = tflearn.regression(net, optimizer=self.opt, loss='categorical_crossentropy', metric=acc,
                                  to_one_hot=True, n_classes=2)
 
-        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_28thlogs/", tensorboard_verbose=0)
+        model = tflearn.DNN(net, tensorboard_dir="/tmp/tflearn_30thlogs/", tensorboard_verbose=0)
 
         self.model = model
 
@@ -98,7 +99,7 @@ class DnnModel(object):
         # try pca
         # net = tflearn.input_data([None, 150], data_preprocessing=None, data_augmentation=None, name="inputlayer")
 
-        net = tflearn.input_data([None, 165], data_preprocessing=None, data_augmentation=None, name="inputlayer")
+        net = tflearn.input_data([None, self.inputlayernodenum], data_preprocessing=None, data_augmentation=None, name="inputlayer")
         if self.inputKeepProb != 1.0:
             net = tflearn.dropout(net, keep_prob=self.inputKeepProb, noise_shape=None, name='dropoutlayer0')
 

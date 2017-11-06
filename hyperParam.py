@@ -23,6 +23,7 @@ class HyperParam(object):
     def __init__(self,filename):
         self.filename=filename
         self.rows = []
+        self.next = 0   # the index of the rows list to be read
 
         # to make sure it's different from any valid preprocessor in system
         self.lastPreProcessor = 'Initial'
@@ -50,54 +51,56 @@ class HyperParam(object):
         else:
             raise ValueError("\n search plan file %s doesn't exist" %filename)
 
-    def readRow(self, rowId):
+    def readNextRow(self):
         """
         :param rowId:
         :return: row , whether or not Train,TFromDate,TToDate,Test,TestFromD,TestToD,Preprocessor is different
          from previous readRow()
          update the member variables and return the param dictionary
         """
-        for row in self.rows:
-            if int(row['Seqno']) == rowId:
-                if row['Skip'] == supportedSkip[2] or row['Skip'] == supportedSkip[3]:  # this row is comment out, not run
-                    log("\nSkip Seqno=%d  on purpose" % rowId)
-                else:   # check if  this row has significant param change from last row
-                    if row['Preprocessor'] != self.lastPreProcessor:
-                        self.lastPreProcessor = row['Preprocessor']
-                        self.preProcessorChanged = True
-                    else:
-                        self.preProcessorChanged = False
+        if self.next == len(self.rows):
+            raise ValueError("end of the search plan %s reached" % self.filename)
 
-                    if row['TFromDate'] != self.lastTFromDate or row['TToDate'] != self.lastTToDate:
-                        self.lastTFromDate = row['TFromDate']
-                        self.lastTToDate = row['TToDate']
-                        self.trainDataChanged = True
-                    else:
-                        self.trainDataChanged = False
+        row = self.rows[self.next]
+        self.next += 1
 
-                    if row['TestFromD'] != self.lastTestFromD or row['TestToD'] != self.lastTestToD:
-                        self.lastTestFromD = row['TestFromD']
-                        self.lastTestToD = row['TestToD']
-                        self.testDataChanged = True
-                    else:
-                        self.testDataChanged = False
+        if row['Skip'] == supportedSkip[2] or row['Skip'] == supportedSkip[3]:  # this row is comment out, not run
+            log("\nSkip Seqno=%s  on purpose" % row['Seqno'])
+        else:   # check if  this row has significant param change from last row
+            if row['Preprocessor'] != self.lastPreProcessor:
+                self.lastPreProcessor = row['Preprocessor']
+                self.preProcessorChanged = True
+            else:
+                self.preProcessorChanged = False
 
-                    if row['ValidationDays'] != self.validationdays:
-                        self.validationdays = row['ValidationDays']
-                        self.validationdaysChanged = True
-                    else:
-                        self.validationdaysChanged = False
+            if row['TFromDate'] != self.lastTFromDate or row['TToDate'] != self.lastTToDate:
+                self.lastTFromDate = row['TFromDate']
+                self.lastTToDate = row['TToDate']
+                self.trainDataChanged = True
+            else:
+                self.trainDataChanged = False
 
-                    #append ValidationSetDate and append to row
-                    stDate = datetime.datetime.strptime(row["TestFromD"], "%Y/%m/%d")
-                    stValidationDate = stDate - datetime.timedelta(int(row['ValidationDays']))
-                    toValidationDate = stDate - datetime.timedelta(1)
-                    row["ValidationFromD"] = datetime.datetime.strftime(stValidationDate,"%Y/%m/%d")
-                    row["ValidationToD"] = datetime.datetime.strftime(toValidationDate,"%Y/%m/%d")
-                return self.validationdaysChanged,self.preProcessorChanged, \
-                       self.trainDataChanged, self.testDataChanged, row
+            if row['TestFromD'] != self.lastTestFromD or row['TestToD'] != self.lastTestToD:
+                self.lastTestFromD = row['TestFromD']
+                self.lastTestToD = row['TestToD']
+                self.testDataChanged = True
+            else:
+                self.testDataChanged = False
 
-        raise ValueError("rowid doesn't exist in search plan %s" % self.filename)
+            if row['ValidationDays'] != self.validationdays:
+                self.validationdays = row['ValidationDays']
+                self.validationdaysChanged = True
+            else:
+                self.validationdaysChanged = False
+
+            #append ValidationSetDate and append to row
+            stDate = datetime.datetime.strptime(row["TestFromD"], "%Y/%m/%d")
+            stValidationDate = stDate - datetime.timedelta(int(row['ValidationDays']))
+            toValidationDate = stDate - datetime.timedelta(1)
+            row["ValidationFromD"] = datetime.datetime.strftime(stValidationDate,"%Y/%m/%d")
+            row["ValidationToD"] = datetime.datetime.strftime(toValidationDate,"%Y/%m/%d")
+        return self.validationdaysChanged,self.preProcessorChanged, \
+               self.trainDataChanged, self.testDataChanged, row
 
     def sanityCheck(self):
         """
@@ -121,7 +124,7 @@ class HyperParam(object):
                 # which will be captured by except clause
                 stTrainDate = datetime.datetime.strptime(row["TFromDate"], "%Y/%m/%d")
                 toTrainDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
-                if stTrainDate >= toTrainDate:
+                if stTrainDate > toTrainDate:
                     raise ValueError("TFromDate could not be later than TToDate in Seqno %s," % row['Seqno'])
                 if stTrainDate < DATAFILE_RANGE['mindate'] or toTrainDate > DATAFILE_RANGE['maxdate']:
                     raise ValueError("TFromDate or TToDate is beyond the available datafile range"
@@ -131,7 +134,7 @@ class HyperParam(object):
 
                 stDate = datetime.datetime.strptime(row["TestFromD"], "%Y/%m/%d")
                 toDate = datetime.datetime.strptime(row["TestToD"], "%Y/%m/%d")
-                if stDate >= toDate:
+                if stDate > toDate:
                     raise ValueError("TestFromD could not be later than TestToD in Seqno %s," % row['Seqno'])
                 if stDate < DATAFILE_RANGE['mindate'] or toDate > DATAFILE_RANGE['maxdate']:
                     raise ValueError("TestFromD or TestToD is beyond the available datafile range"

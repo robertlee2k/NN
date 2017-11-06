@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import datetime
+from sklearn.feature_selection import SelectKBest
 
 from testResult import TestResult
 from utility import log, get_roc_auc, printConfusionMatrix,plotSample
@@ -12,15 +13,18 @@ from dnnModel import DnnModel
 from preprocess import DataPreprocess
 from plot_tflearn_roc_auc import plot_tflearn_ROC  # for plotting ROC curve
 
+FEATURENUM = 165     # original dataset's total feature number
 EXPORT_DIR = "/home/topleaf/stock/savedModel/"  # export dir base
 # the file is used to store/load datapreprocessor that is used before training and predicting
 dppfilename = 'dpp.bin'     # default datapreprocess filename to hold DataPreprocess class dump
 hyperparamfilename = 'hyperParam.bin'  # default filename to hold hpDict
+featureSelectorfilename = 'FeatureKBest.bin'
 testResultfile = "DNN_Training_results.csv"  # file to record model training results
 
 # batch size of for prediction , prevent runing out of memory when predict a large set of data
 # total needed memory = predictBatchSize * nodeNumbers * 4
-predictBatchSize = 100000
+predictBatchSize = 102400
+
 
 def evalprint(model, X_predict, y_true, title,
               fig, nrow, ncol, plot_number, annotate=False, drawplot=True):
@@ -154,6 +158,8 @@ class ModelStore(object):
         self.dpp = None
         self.hpDict = None
         self.loadmymodel = None
+        self.featureSel = None
+        self.inputlayerNodenum = FEATURENUM
         self.trainAuc = self.traindevAuc = None
         self.testAuc = self.valAuc = None
         self.testTa = self.valTa = None
@@ -162,7 +168,7 @@ class ModelStore(object):
         self.testNa = self.valNa = None
 
     # save a trainedModel with its datapreprocessor object to disk, remember its location
-    def save(self, hpDict, modelinst, dp):
+    def save(self, hpDict, modelinst, dp,featureSelector):
         """
         :param hpDict: including all the required hyper parameters of this model,
         :param modelinst: model instance to be saved
@@ -174,7 +180,10 @@ class ModelStore(object):
             assert ("input parameter(%s) must be a instance of %s" %(modelinst, DnnModel.__class__.__name__))
         if not isinstance(dp, DataPreprocess):
             assert("input parameter(%s) must be a instance of %s" %( dp, DataPreprocess.__class__.__name__))
-        # think about an unique name to identify this model, here I use runid as the folder name
+
+        if not isinstance(featureSelector, SelectKBest) and featureSelector is not None:
+            assert ("input parameter(%s) must be a instance of %s or None" % (featureSelector,SelectKBest.__class__.__name__))
+            # think about an unique name to identify this model, here I use runid as the folder name
         # since it's unique
         #
 
@@ -184,6 +193,7 @@ class ModelStore(object):
             #                self.epoch,self.minibatch)
         self.hpDict = hpDict
         self.dpp = dp
+        self.featureSel = featureSelector
         # save the model to disk, using unique runid of this model as folder name
         self.dirname = ''.join((EXPORT_DIR, modelinst.runid))
         if os.path.isfile(self.dirname):
@@ -210,9 +220,17 @@ class ModelStore(object):
         with open(fullpath, 'wb') as f:
             pickle.dump(dp, f)
 
+        # save the hyperparameter to disk
         fullpath = ''.join((self.dirname, '/', hyperparamfilename))
         with open(fullpath, 'wb') as f:
             pickle.dump(hpDict, f)
+
+        # save the featureSelector to disk
+        if featureSelector is not None:
+            fullpath = ''.join((self.dirname, '/', featureSelectorfilename))
+            import pickle
+            with open(fullpath, 'wb') as f:
+                pickle.dump(featureSelector, f)
 
     def getModelFullpath(self, fromDate, toDate, minAuc='0.55',maxAuc='1'):
         """
@@ -264,6 +282,7 @@ class ModelStore(object):
         dppfullpath = ''.join((self.dirname, '/', dppfilename))
         hpfullpath = ''.join((self.dirname, '/', hyperparamfilename))
         modelfullname = ''.join((self.dirname, '/', self.modelfilename))
+        fsfullpath = ''.join((self.dirname, '/', featureSelectorfilename))
         try:
             # load its preprocess  datascaler
             if os.path.exists(dppfullpath):
@@ -282,11 +301,23 @@ class ModelStore(object):
             else:
                 raise IOError("hyper parameter file%s doens't exist" %hpfullpath)
 
+            # load the model's featureSelector back in order to rebuild the model
+            if os.path.exists(fsfullpath):
+                log('load previous feature selector:%s' % fsfullpath)
+                import pickle
+                with open(fsfullpath, 'rb') as f:
+                    self.featureSel = pickle.load(f)
+                    self.inputlayerNodenum = self.featureSel.k
+            else:
+                log("featureSelection file %s doesn't exist, use default inputLayerNodeNum=%d" %(fsfullpath,FEATURENUM))
+                self.featureSel=None
+                self.inputlayerNodenum = FEATURENUM
+
             # reconstruct the DNN model and load the weights from previous trained model
             if os.path.exists(modelfullname+'.meta'):
                 log('load previous trained model:%s' % modelfullname)
                 tf.reset_default_graph()
-                self.loadmymodel = DnnModel(self.hpDict)
+                self.loadmymodel = DnnModel(self.hpDict, self.inputlayerNodenum)
                 self.loadmymodel.model.load(modelfullname, weights_only=True)
                 self.loadmymodel.runid = os.path.basename(self.dirname)
             else:
@@ -375,10 +406,9 @@ class ModelStore(object):
             print ('=' * 30 + "end of print exception" + '=' * 30)
             raise Exception
 
-    def writeResult(self, seqid, hpDict, modelinst, st, endt, duration):
+    def writeResult(self, hpDict, modelinst, st, endt, duration):
         """
         update test result  to testResult file according to above column sequence
-        :param seqid:  the id in hyperParamSearch plan
         :param modelinst: model instance of DNNModel
         :param hpDict:  datapreprocess instance that has been used to preprocess datasets
         :param st: start time in date/time format to build this model
@@ -393,7 +423,7 @@ class ModelStore(object):
             raise ValueError("self.dirname is None")
         if (self.trainAuc is not None) and (self.trainTa is not None ) \
             and (self.trainNa is not None):
-            result = [seqid, modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
+            result = [hpDict['Seqno'], modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
                       modelinst.regularization,
                       "%02d" % modelinst.hiddenLayer,
                       "%d" % modelinst.hiddenUnit,
@@ -428,7 +458,7 @@ class ModelStore(object):
             # training auc,loss, training accuracy,training null accuracy,
             # trainingdev auc, trainingdev accuracy,null accuracy
             # Val auc, val accuracy and val null accuracy are NA,since model is reload from disk,no training
-            result = [seqid, modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
+            result = [hpDict['Seqno'], modelinst.runid, hpDict['Preprocessor'], modelinst.opt.name,
                       modelinst.regularization,
                       "%02d" % modelinst.hiddenLayer,
                       "%d" % modelinst.hiddenUnit,
@@ -462,7 +492,7 @@ class ModelStore(object):
         trackRecord = TestResult(self.testRecordName)
         trackRecord.append(result)
 
-    def evaluateTestSet(self, seqid, X_test,y_test,itemDict):
+    def evaluateTestSet(self, X_test,y_test,itemDict):
         '''
         1.evaluate the model using the test data only
         2.generate auc,accuracy etc
@@ -471,7 +501,6 @@ class ModelStore(object):
         :param itemDict:
         :param X_test:
         :param y_test:
-        :param seqid: id# from ModelEvalPlan.csv
         :return:
         '''
         log("Evaluate the trained model with test data only,save its plot")
@@ -481,8 +510,8 @@ class ModelStore(object):
         assert (isinstance(self.dpp, DataPreprocess))
         assert (self.hpDict is not None)
         try:
-            figTitle = "%dRunid_%s_%s_%s_epoch%d_minibatch%d" \
-                       % (seqid,self.loadmymodel.runid, self.hpDict['Preprocessor'],
+            figTitle = "%sRunid_%s_%s_%s_epoch%d_minibatch%d" \
+                       % (itemDict['Seqno'],self.loadmymodel.runid, self.hpDict['Preprocessor'],
                           self.loadmymodel.opt.name,
                           self.loadmymodel.epoch, self.loadmymodel.minibatch)
             figid = plt.figure(figTitle, figsize=(10, 8))
@@ -491,15 +520,15 @@ class ModelStore(object):
             # evaluate the model with Test data
             self.testAuc, self.testTa, self.testNa = evalprint(self.loadmymodel.model,
                                                                X_test, y_test,
-                          "with Test data (seqid=%d) From %s to %s"
-                          % (seqid,itemDict["TestFromD"], itemDict["TestToD"]),
+                          "with Test data (seqno=%s) From %s to %s"
+                          % (itemDict['Seqno'],itemDict["TestFromD"], itemDict["TestToD"]),
                           figid, 1, 1, 1, annotate=True, drawplot=True)
 
             # save the plot to a file under the same runid folder
             #  with seqid as part of its name to save multiple testset plots
             # that share the same training model
-            plotName = "%d%s_%s_alpha%0.4f_epoch%d_%d.png" \
-                       % (seqid, self.dpp.preScalerClassName, self.loadmymodel.opt.name,
+            plotName = "%s%s_%s_alpha%0.4f_epoch%d_%d.png" \
+                       % (itemDict['Seqno'], self.dpp.preScalerClassName, self.loadmymodel.opt.name,
                           self.loadmymodel.learningrate,
                           self.loadmymodel.epoch, self.loadmymodel.minibatch)
             fullpath = ''.join((EXPORT_DIR, self.loadmymodel.runid))

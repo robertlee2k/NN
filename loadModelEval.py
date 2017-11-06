@@ -76,7 +76,7 @@ def main():
         loopstartTime = time.time()  # start time in ms.
         st = time.ctime()  # time in date/time format
         try:
-            itemDict = lp.readRow(rowId=seqid)
+            itemDict = lp.readNextRow()
         except ValueError as e:
             log("WARNING: exception captured")
             log(e.message)
@@ -121,7 +121,7 @@ def main():
                 log('='*20 + "   seqid=%d,modelid=%d ---> using trained model at:%s   "
                     % (seqid,modelid, dirname) + '='*20)
                 try:
-                    # load the trained model and its accompanied hyperparam,data preprocess files
+                    # load the trained model and its accompanied hyperparam,data preprocess ,featureselection files
                     # from the retrieved location : dirname
                     modelst = modelst.load(dirname)
                     #  update hpDict record to replace original testFromD and TestToD dates when training
@@ -144,13 +144,22 @@ def main():
                 # plotFeatures(X_test,test_set.featurenames,[1],
                 #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
                 y_test = test_set.target
+
+                # apply the same feature selection as used for training set to test_set
+                if modelst.featureSel is not None:
+                    log("\n apply feature selector %s to test_set" % modelst.featureSel.__class__.__name__)
+                    X_test = modelst.featureSel.transform(X_test)
+                    # plot transformed test data to review
+                # plotFeatures(X_test,test_set.featurenames,[1],
+                #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
+
                 try:
-                    modelst.evaluateTestSet(seqid, X_test, y_test,itemDict)
+                    modelst.evaluateTestSet( X_test, y_test,itemDict)
 
                     # calculate the duration of this loop, update record
                     loopElapsedTime = duration(loopstartTime)
                     log("\nthe time of loading the model/evaluating the model is %s" % loopElapsedTime)
-                    modelst.writeResult(seqid, modelst.hpDict, modelst.loadmymodel, st, time.ctime(), loopElapsedTime)
+                    modelst.writeResult(modelst.hpDict, modelst.loadmymodel, st, time.ctime(), loopElapsedTime)
 
                     # visualize first 10 samples that have been wrongly classified for human review
                     errorAnalysis(modelst.loadmymodel, X_test, y_test, "Test data error analysis",10)

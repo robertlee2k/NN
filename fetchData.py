@@ -1,5 +1,7 @@
 
 from tensorflow.python.platform import gfile
+from sklearn.preprocessing import Imputer
+import pandas as pd
 import datetime
 import collections
 import csv
@@ -168,33 +170,56 @@ class FetchData(object):
             # fromData and toDate, the following code is to iterate those files, load data,
             # concatenate them into a fullData,fullTarget numpy array.
             datafilename = self.datafilelist.pop(0)
-            fullData, fullTarget, feature_names = self.load_partcsv_without_header(
+            fullData, fullTarget, feature_names = self.loadcsv(
                 filename=datafilename,
                 target_dtype=np.int,
                 features_dtype=np.float32,
-                start_rowid=DATASTART,
-                end_rowid=DATASTOP,
                 fromDate=fromDate,
                 toDate=toDate,
-                discard_colids=[0, 1, 2, 3, 4, -1],
+                discard_columns=['id','tradeDate','code','mc_date','shouyilv'],
                 # add -1 in the last column to exclude the percentage infor,exclude 2# stockcode,
-                target_column=5,
-                filling_value=1.0,
+                target_column='positive',
                 selectedAvgline=selectedAvgline
             )
+            #
+            # fullData, fullTarget, feature_names = self.load_partcsv_without_header(
+            #     filename=datafilename,
+            #     target_dtype=np.int,
+            #     features_dtype=np.float32,
+            #     start_rowid=DATASTART,
+            #     end_rowid=DATASTOP,
+            #     fromDate=fromDate,
+            #     toDate=toDate,
+            #     discard_colids=[0, 1, 2, 3, 4, -1],
+            #     # add -1 in the last column to exclude the percentage infor,exclude 2# stockcode,
+            #     target_column=5,
+            #     filling_value=1.0,
+            #     selectedAvgline=selectedAvgline
+            # )
             for datafilename in self.datafilelist:
-                partData, partTarget, feature_names = self.load_partcsv_without_header(
+                # partData, partTarget, feature_names = self.load_partcsv_without_header(
+                #     filename=datafilename,
+                #     target_dtype=np.int,
+                #     features_dtype=np.float32,
+                #     start_rowid=DATASTART,
+                #     end_rowid=DATASTOP,
+                #     fromDate=fromDate,
+                #     toDate=toDate,
+                #     discard_colids=[0, 1, 2, 3, 4, -1],
+                #     # add -1 in the last column to exclude the percentage infor,exclude 2# stockcode,
+                #     target_column=5,
+                #     filling_value=1.0,
+                #     selectedAvgline=selectedAvgline
+                # )
+                partData, partTarget, feature_names = self.loadcsv(
                     filename=datafilename,
                     target_dtype=np.int,
                     features_dtype=np.float32,
-                    start_rowid=DATASTART,
-                    end_rowid=DATASTOP,
                     fromDate=fromDate,
                     toDate=toDate,
-                    discard_colids=[0, 1, 2, 3, 4, -1],
+                    discard_columns=['id', 'tradeDate', 'code', 'mc_date', 'shouyilv'],
                     # add -1 in the last column to exclude the percentage infor,exclude 2# stockcode,
-                    target_column=5,
-                    filling_value=1.0,
+                    target_column='positive',
                     selectedAvgline=selectedAvgline
                 )
                 fullData = np.concatenate((fullData, partData),axis=0)
@@ -204,6 +229,55 @@ class FetchData(object):
             raise ValueError(e)  #capture and throw the exception to the caller
         else:
             return Dataset(data=fullData, target=fullTarget, featurenames=feature_names)
+
+    def loadcsv(self,filename,target_dtype,features_dtype,fromDate,toDate,discard_columns,
+                target_column='positive',
+                selectedAvgline=selectedAvgline
+                ):
+        """
+        load csv using pandas method,filling missing values with mean of this column
+        :param filename:
+        :param target_dtype:
+        :param features_dtype:
+        :param fromDate:
+        :param toDate:
+        :param discard_columns:
+        :param target_column:
+        :param selectedAvgline:
+        :return:
+        """
+        log("Loading data to memory from %s using Pandas,this will take a while ... ..." % filename)
+        dateparse = lambda dates: pd.datetime.strptime(dates, '%Y/%m/%d')
+
+        # set 'dataDate' column as date, use it as index, '?' is the missing value, change it to 'NaN' after reading
+        # set dtype of 6 specified columns to be int, others will be float64
+        originaldf = pd.read_csv(filename,
+                                 na_values=['?'],
+                                 parse_dates=['dataDate'],
+                                 index_col='dataDate',
+                                 date_parser=dateparse,
+                                 dtype={'selected_avgline':np.int8,'positive':np.int8,'zhishu_code':np.int8,
+                                        'is_st':np.int8,'ishs300':np.int8,'iszz500':np.int8,'zhangdieting':np.int8})
+            #  only keep desired data between 'From' and 'To' date
+        df = originaldf[fromDate:toDate]
+        if df.shape[0] == 0:  # no data is loaded
+            raise ValueError("No data is loaded, check your %s and fromdate:%s,ToDate%s" % (filename, fromDate, toDate))
+        log("load %d rows out of %d" %(df.shape[0],originaldf.shape[0]))
+        # discard undesired columns
+        for col in discard_columns:
+            del df[col]
+
+        y = df.pop(target_column)
+
+        #  here , do sanity check, filling missing values with mean value of this column
+        log("filling missing values with mean value of the column")
+        imp = Imputer(missing_values='NaN',strategy="mean",axis=0)
+        imp.fit(df)
+        # print ('before imputer: %s' %(df.isnull().sum().sort_values()))
+        df=pd.DataFrame(data=imp.transform(df),columns=df.columns)
+       # print ('after imputer: %s' % (df.isnull().sum().sort_values()))
+
+        return df.values,y.values,list(df.columns)
 
     def load_partcsv_without_header(self,filename,
                                     target_dtype,

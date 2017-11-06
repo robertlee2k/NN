@@ -16,6 +16,7 @@ print(__doc__)
 
 import time
 import tensorflow as tf
+from sklearn.feature_selection import SelectKBest, f_classif
 
 # the following packages  are part of the project
 from utility import log, plotFeatures, duration, datasetSplit, datasetShuffle
@@ -75,13 +76,13 @@ def main():
         return
     else:
         log("\n sanity check on search plan file(%s) PASSED " % hyperParamSetFile)
-    total_loop = hpIns.rows.__len__() -1
+    total_loop = len(hpIns.rows)
     for seqid in range(0, total_loop):
         loopstartTime = time.time()  # start time in ms.
         st = time.ctime()  # time in date/time format
         log ("=============================   seqid %d out of %d  starts at %s ================================" %(seqid, total_loop,st))
         try:
-            validationDaysChanged,preProcessChanged, trainDataChanged, testDataChanged, hpDict = hpIns.readRow(rowId=seqid)
+            validationDaysChanged,preProcessChanged, trainDataChanged, testDataChanged, hpDict = hpIns.readNextRow()
         except ValueError as e:
             log("WARNING: exception captured")
             log(e.message)
@@ -95,8 +96,8 @@ def main():
         # create an instance of FetchData class to load datasets.
         fd = FetchData()
         if trainDataChanged:
-            log('\n%d ---> loading training data from:%s to:%s in progress ... time:%s'
-                % (seqid, hpDict["TFromDate"], hpDict["TToDate"],  time.ctime()))
+            log('\n%d Seqno= %s ---> loading training data from:%s to:%s in progress ... time:%s'
+                % (seqid, hpDict['Seqno'], hpDict["TFromDate"], hpDict["TToDate"],  time.ctime()))
 
             try:
                 training_set = fd.loadData(hpDict["TFromDate"], hpDict["TToDate"])
@@ -210,31 +211,46 @@ def main():
 
         # try pca
         # X_test = pca.transform(X_test)
-        log('\nbuilding model in progress ... time:%s' % (time.ctime()))
+
+
+        #try feature selections, only select the best 132 features, which is 80% of total feature numbers
+
+        inputLayerNodeNum = 132
+        log("Apply featureSelection to pick up %d best features" %inputLayerNodeNum)
+        featureSelector = SelectKBest(f_classif,k=inputLayerNodeNum).fit(X_train,y_train)
+        X_trainSel = featureSelector.transform(X_train)
+        X_traindevSel = featureSelector.transform(X_traindev)
+        X_valsel = featureSelector.transform(X_val)
+        X_testsel = featureSelector.transform(X_test)
+
+        log('\nbuilding model with %d input nodes in progress ... time:%s' % (inputLayerNodeNum,time.ctime()))
         tf.reset_default_graph()
         try:
-            mymodel = DnnModel(hpDict)
-            mymodel.train(X_train, y_train, X_val, y_val)
+            mymodel = DnnModel(hpDict,inputLayerNodeNum )
+            #mymodel.train(X_train, y_train, X_val, y_val)
+
+            mymodel.train(X_trainSel, y_train, X_valsel, y_val)
 
             # save the whole model including its data preprocess method and datascaler in disk,
             # remember its location in a file, so that it can be loaded later
             modelStore = ModelStore()
-            modelStore.save(hpDict, mymodel, dp)
+            modelStore.save(hpDict, mymodel, dp,featureSelector)
 
             # evaluate the model with validaton/test set,save the AUC plots to disk
-            modelStore.evaluate(mymodel, dp, X_val, y_val, X_test, y_test, mode="TestSet")
+            #modelStore.evaluate(mymodel, dp, X_val, y_val, X_test, y_test, mode="TestSet")
+            modelStore.evaluate(mymodel, dp, X_valsel, y_val, X_testsel, y_test, mode="TestSet")
             # evaluate the model with Training/training_dev later, in case memory allocation error exception happens
-            modelStore.evaluate(mymodel, dp, X_train, y_train, X_traindev, y_traindev, mode="shuffleTrainDev")
-
+            #modelStore.evaluate(mymodel, dp, X_train, y_train, X_traindev, y_traindev, mode="shuffleTrainDev")
+            modelStore.evaluate(mymodel, dp, X_trainSel, y_train, X_traindevSel, y_traindev, mode="shuffleTrainDev")
 
             # only for debugging, swap the X_test and X_traindev to test if evaluate procedure has bug.2017-10-27 passed test.
-            # modelStore.evaluate(seqid, mymodel, dp, X_train, y_train, X_test, y_test, mode="shuffleTrainDev")
-            # modelStore.evaluate(seqid, mymodel, dp, X_val, y_val, X_traindev, y_traindev, mode="TestSet")
+            # modelStore.evaluate(mymodel, dp, X_train, y_train, X_test, y_test, mode="shuffleTrainDev")
+            # modelStore.evaluate(mymodel, dp, X_val, y_val, X_traindev, y_traindev, mode="TestSet")
 
             # calculate the duration of this loop, update record to DNN_Training_result.
             loopElapsedTime = duration(loopstartTime)
             log("\nthe time of loading data,building/training/evaluating the model is %s" % loopElapsedTime)
-            modelStore.writeResult(seqid, hpDict, mymodel, st, time.ctime(), loopElapsedTime)
+            modelStore.writeResult(hpDict, mymodel, st, time.ctime(), loopElapsedTime)
 
             # reduce a reference to instance of DNNModel since its task has come to an end.
             # let system to gabage collect it
@@ -255,7 +271,7 @@ def main():
 
     wholetime = duration(runStartTime)
     log("\nthe WHOLE ELAPSED time of loading data and training %d models is %s"
-        % (wholetime,total_loop))
+        % (total_loop,wholetime))
 
 
       # keyp = raw_input("\nPlease input a row# to predict: (-1 to quit)")

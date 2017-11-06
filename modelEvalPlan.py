@@ -15,6 +15,7 @@ class ModelEvalPlan(object):
     def __init__(self,filename):
         self.evalplan = filename
         self.rows = []
+        self.next = 0
 
         log("\nLoading and parsing file:%s" % filename)
         if os.path.exists(self.evalplan):
@@ -26,15 +27,16 @@ class ModelEvalPlan(object):
         else:
             raise ValueError("\n model evaluation plan file %s doesn't exist" % filename)
 
-    def readRow(self, rowId):
-        for row in self.rows:
-            if rowId == int(row['Seqno']):
-                if row['Skip'] == supportedSkip[2] or row['Skip'] == supportedSkip[3]:  # this row is comment out, not run
-                    log("\nSkip Seqno=%d  on purpose" % rowId)
+    def readNextRow(self):
+        if self.next == len(self.rows):
+            raise ValueError("end of the search plan %s reached" % self.evalplan)
+        row = self.rows[self.next]
+        self.next += 1
 
-                return row
+        if row['Skip'] == supportedSkip[2] or row['Skip'] == supportedSkip[3]:  # this row is comment out, not run
+            log("\nSkip Seqno=%s  on purpose" % row['Seqno'])
 
-        raise ValueError("rowid %d doesn't exist in the model evaluation plan %s" % ( rowId,self.evalplan))
+        return row
 
     def sanityCheck(self):
         """
