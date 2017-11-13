@@ -251,18 +251,19 @@ class FetchData(object):
 
         # set 'dataDate' column as date, use it as index, '?' is the missing value, change it to 'NaN' after reading
         # set dtype of 6 specified columns to be int, others will be float64
-        originaldf = pd.read_csv(filename,
+        df = pd.read_csv(filename,
                                  na_values=['?'],
                                  parse_dates=['dataDate'],
                                  index_col='dataDate',
                                  date_parser=dateparse,
                                  dtype={'selected_avgline':np.int8,'positive':np.int8,'zhishu_code':np.int8,
                                         'is_st':np.int8,'ishs300':np.int8,'iszz500':np.int8,'zhangdieting':np.int8})
+        originalrows=df.shape[0]
             #  only keep desired data between 'From' and 'To' date
-        df = originaldf[fromDate:toDate]
+        df = df[fromDate:toDate]
         if df.shape[0] == 0:  # no data is loaded
             raise ValueError("No data is loaded, check your %s and fromdate:%s,ToDate%s" % (filename, fromDate, toDate))
-        log("load %d rows out of %d" %(df.shape[0],originaldf.shape[0]))
+        log("load %d rows out of %d" %(df.shape[0],originalrows))
         # discard undesired columns
         for col in discard_columns:
             del df[col]
@@ -273,8 +274,19 @@ class FetchData(object):
         log("filling missing values with mean value of the column")
         imp = Imputer(missing_values='NaN',strategy="mean",axis=0)
         imp.fit(df)
+
         # print ('before imputer: %s' %(df.isnull().sum().sort_values()))
         df=pd.DataFrame(data=imp.transform(df),columns=df.columns)
+        # dtype is changed to float64 by the imputer, now convert dtype of specified columns to our required type
+        for column in ['is_st','ishs300', 'iszz500', 'zhangdieting']:
+            df[column]=df[column].astype(bool)
+        for column in [ 'selected_avgline','zhishu_code']:
+            df[column] = df[column].astype(np.int8)     # change to onehot encoder later
+        for column in ['circulation_marketVal_gears', 'leiji_ma10_top_days',
+                               'leiji_ma20_top_days', 'leiji_ma30_top_days',
+                               'leiji_ma5_top_days', 'leiji_ma60_top_days']:
+            df[column]=df[column].astype(np.int64)
+
        # print ('after imputer: %s' % (df.isnull().sum().sort_values()))
 
         return df.values,y.values,list(df.columns)
