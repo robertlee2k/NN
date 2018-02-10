@@ -2,12 +2,8 @@ import tflearn
 import numpy as np
 
 import time
-import os
 
-
-
-
-#below are self written modules
+# below are self written modules
 from utility import log
 from hyperParam import supportedOptimizer, supportedRegularization
 
@@ -15,7 +11,6 @@ from hyperParam import supportedOptimizer, supportedRegularization
 #  to avoid creating multiple instances of 4 Optimizer classes
 optDictMap = {'Adam': tflearn.Adam(), 'Momentum': tflearn.Momentum(),
               'RMSProp': tflearn.RMSProp(), 'SGD': tflearn.SGD()}
-
 
 
 class DnnModel(object):

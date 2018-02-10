@@ -7,7 +7,7 @@ from utility import log,isIntersection
 
 
 DATAFILE_RANGE = {"mindate": datetime.datetime.strptime("2005/01/01","%Y/%m/%d"),
-                  "maxdate": datetime.datetime.strptime("2017/08/31", "%Y/%m/%d")}
+                  "maxdate": datetime.datetime.strptime("2017/12/28", "%Y/%m/%d")}
 supportedOptimizer= ('Adam', 'Momentum', 'RMSProp','SGD')
 supportedScaler =('MinMax', 'Standard', 'MidRange')
 supportedRegularization = ('None','L2','L1')

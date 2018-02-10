@@ -48,7 +48,7 @@ def evalprint(model, X_predict, y_true, title,
     fulllength = len(X_predict)
     batchnum = fulllength / predictBatchSize
     lastbatch = fulllength % predictBatchSize
-    if batchnum !=0:
+    if batchnum != 0:
         predicted = model.predict(X_predict[0:predictBatchSize])
         for batchid in range(1,batchnum):
             predicted = np.concatenate((predicted, model.predict(X_predict[batchid*predictBatchSize:
@@ -168,11 +168,12 @@ class ModelStore(object):
         self.testNa = self.valNa = None
 
     # save a trainedModel with its datapreprocessor object to disk, remember its location
-    def save(self, hpDict, modelinst, dp,featureSelector):
+    def save(self, hpDict, modelinst, dp, featureSelector):
         """
         :param hpDict: including all the required hyper parameters of this model,
         :param modelinst: model instance to be saved
         :param dp: datapreprocess instance which includes datascaler.
+        :param featureSelector: the instance of featureselector that have been used in this model
         :return: None
         """
 
@@ -367,7 +368,7 @@ class ModelStore(object):
 
                 # evaluate the model with Training_dev data
                 self.traindevAuc, self.traindevTa, self.traindevNa = \
-                    evalprint(modelinst.model, X_test, y_test, "with 1% additinal data as " + mode,
+                    evalprint(modelinst.model, X_test, y_test, "with 1% additional data as " + mode,
                               figid, 2, 1, 2, annotate=True, drawplot=True)
             elif mode == "TestSet":
                 # evaluate the model with Validation data
@@ -451,6 +452,7 @@ class ModelStore(object):
                       "%s" % st,
                       "%s" % endt,  self.dirname,
                       hpDict["TFromDate"], hpDict["TToDate"],
+                      hpDict['TrainRowNum'],
                       hpDict['ValidationFromD'], hpDict['ValidationToD'],
                       hpDict['TestFromD'], hpDict['TestToD']]
         else:
@@ -486,6 +488,7 @@ class ModelStore(object):
                       "%s" % st,
                       "%s" % endt,  self.dirname,
                       hpDict["TFromDate"], hpDict["TToDate"],
+                      hpDict['TrainRowNum'],
                       hpDict['ValidationFromD'], hpDict['ValidationToD'],
                       hpDict['TestFromD'], hpDict['TestToD']]
 

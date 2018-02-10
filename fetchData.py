@@ -14,17 +14,32 @@ from utility import log,isIntersection
 DATAFILEPATH = "/home/topleaf/stock/tensorFlowData/"
 
 # make sure the files have meaningful names that reflect their data range!!!!  in alphabet order.
-DATAFILELIST = {"tensorFlowData(200501-201012).csv":
-                (datetime.datetime.strptime("2005/01/01","%Y/%m/%d"),
-                datetime.datetime.strptime("2010/12/31","%Y/%m/%d")),
-                "tensorFlowData(201101-201612).csv":
-                (datetime.datetime.strptime("2011/01/01","%Y/%m/%d"),
-                datetime.datetime.strptime("2016/12/31","%Y/%m/%d")),
-                "tensorFlowData(201701-201709).csv":
-                (datetime.datetime.strptime("2017/01/01", "%Y/%m/%d"),
-                 datetime.datetime.strptime("2017/08/31", "%Y/%m/%d")),
+# DATAFILELIST = {"tensorFlowData(200501-201012).csv":
+#                 (datetime.datetime.strptime("2005/01/01","%Y/%m/%d"),
+#                 datetime.datetime.strptime("2010/12/31","%Y/%m/%d")),
+#                 "tensorFlowData(201101-201612).csv":
+#                 (datetime.datetime.strptime("2011/01/01","%Y/%m/%d"),
+#                 datetime.datetime.strptime("2016/12/31","%Y/%m/%d")),
+#                 "tensorFlowData(201701-201709).csv":
+#                 (datetime.datetime.strptime("2017/01/01", "%Y/%m/%d"),
+#                  datetime.datetime.strptime("2017/08/31", "%Y/%m/%d")),
+#               }
+DATAFILELIST = {"tensorFlowData200501-200712(group11).csv":
+                (datetime.datetime.strptime("2005/01/04","%Y/%m/%d"),
+                datetime.datetime.strptime("2007/12/27","%Y/%m/%d")),
+                "tensorFlowData200801-201012(group11).csv":
+                (datetime.datetime.strptime("2007/12/28","%Y/%m/%d"),
+                datetime.datetime.strptime("2010/12/30","%Y/%m/%d")),
+                "tensorFlowData201101-201312(group11).csv":
+                (datetime.datetime.strptime("2010/12/31", "%Y/%m/%d"),
+                 datetime.datetime.strptime("2013/12/30", "%Y/%m/%d")),
+                "tensorFlowData201401-201612(group11).csv":
+                (datetime.datetime.strptime("2013/12/31", "%Y/%m/%d"),
+                datetime.datetime.strptime("2016/12/29", "%Y/%m/%d")),
+                "tensorFlowData201701-201712(group11).csv":
+                (datetime.datetime.strptime("2016/12/30", "%Y/%m/%d"),
+                datetime.datetime.strptime("2017/12/28", "%Y/%m/%d")),
               }
-
 DATASTART = 1     # the starting row# of the data file to be read
 DATASTOP = 1500000  # the last row of the data file to be read, must set it to big enough
                     # use fromDate/toDate to specify the actual read row lines
@@ -113,7 +128,8 @@ class FetchData(object):
 
     def __init__(self):
         self.datafilelist = []
-
+        # Create a list of features to dummy
+        self.todummy_list = ['selected_avgline',   'zhishu_code']
 
 
 
@@ -154,10 +170,19 @@ class FetchData(object):
             log("%d: " % (i + 1) + str(self.datafilelist[i]))
 
 
+    # Function to dummy all the categorical variables used for modeling
+    def _dummy_df(self,df, todummy_list):
+        for x in todummy_list:
+            dummies = pd.get_dummies(df[x], prefix=x, dummy_na=False)
+            df = df.drop(x, 1)
+            df = pd.concat([df, dummies], axis=1)
+        return df
+
     def loadData(self, fromDate, toDate):
         """
         this method handle loading data from files to memory in datasets format and return it
         the logic of which columns , rows, dates are loaded can be customized in this method.
+        2018/1/31 add data cleaning functionality into this method, to
         :param fromDate:
         :param toDate:
         :return: Dataset format structure in memory
@@ -170,7 +195,7 @@ class FetchData(object):
             # fromData and toDate, the following code is to iterate those files, load data,
             # concatenate them into a fullData,fullTarget numpy array.
             datafilename = self.datafilelist.pop(0)
-            fullData, fullTarget, feature_names = self.loadcsv(
+            fullDf, fullTarget = self.loadcsv(
                 filename=datafilename,
                 target_dtype=np.int,
                 features_dtype=np.float32,
@@ -211,7 +236,7 @@ class FetchData(object):
                 #     filling_value=1.0,
                 #     selectedAvgline=selectedAvgline
                 # )
-                partData, partTarget, feature_names = self.loadcsv(
+                partDf, partTarget = self.loadcsv(
                     filename=datafilename,
                     target_dtype=np.int,
                     features_dtype=np.float32,
@@ -222,13 +247,16 @@ class FetchData(object):
                     target_column='positive',
                     selectedAvgline=selectedAvgline
                 )
-                fullData = np.concatenate((fullData, partData),axis=0)
+                # fullDf = np.concatenate((fullDf, partDf),axis=0)
+                fullDf=pd.concat([fullDf,partDf])
                 fullTarget = np.concatenate((fullTarget, partTarget), axis=0)
 
         except ValueError as e:
             raise ValueError(e)  #capture and throw the exception to the caller
         else:
-            return Dataset(data=fullData, target=fullTarget, featurenames=feature_names)
+            df=self._dummy_df(fullDf,self.todummy_list)
+            log("apply dummy_df to change categorical features,after that the feature number is (%d,%d) " %(df.shape[0],df.shape[1]))
+            return Dataset(data=df.values, target=fullTarget, featurenames=list(df.columns))
 
     def loadcsv(self,filename,target_dtype,features_dtype,fromDate,toDate,discard_columns,
                 target_column='positive',
@@ -271,25 +299,26 @@ class FetchData(object):
         y = df.pop(target_column)
 
         #  here , do sanity check, filling missing values with mean value of this column
-        log("filling missing values with mean value of the column")
-        imp = Imputer(missing_values='NaN',strategy="mean",axis=0)
-        imp.fit(df)
-
-        # print ('before imputer: %s' %(df.isnull().sum().sort_values()))
-        df=pd.DataFrame(data=imp.transform(df),columns=df.columns)
-        # dtype is changed to float64 by the imputer, now convert dtype of specified columns to our required type
-        for column in ['is_st','ishs300', 'iszz500', 'zhangdieting']:
-            df[column]=df[column].astype(bool)
-        for column in [ 'selected_avgline','zhishu_code']:
-            df[column] = df[column].astype(np.int8)     # change to onehot encoder later
-        for column in ['circulation_marketVal_gears', 'leiji_ma10_top_days',
-                               'leiji_ma20_top_days', 'leiji_ma30_top_days',
-                               'leiji_ma5_top_days', 'leiji_ma60_top_days']:
-            df[column]=df[column].astype(np.int64)
+        # log("filling missing values with mean value of the column")
+        # imp = Imputer(missing_values='NaN',strategy="mean",axis=0)
+        # imp.fit(df)
+        #
+        # # print ('before imputer: %s' %(df.isnull().sum().sort_values()))
+        # df=pd.DataFrame(data=imp.transform(df),columns=df.columns)
+        # # dtype is changed to float64 by the imputer, now convert dtype of specified columns to our required type
+        # for column in ['is_st','ishs300', 'iszz500', 'zhangdieting']:
+        #     df[column]=df[column].astype(bool)
+        # for column in [ 'selected_avgline','zhishu_code']:
+        #     df[column] = df[column].astype(np.int8)     # change to onehot encoder later
+        # for column in ['circulation_marketVal_gears', 'leiji_ma10_top_days',
+        #                        'leiji_ma20_top_days', 'leiji_ma30_top_days',
+        #                        'leiji_ma5_top_days', 'leiji_ma60_top_days']:
+        #     df[column]=df[column].astype(np.int64)
 
        # print ('after imputer: %s' % (df.isnull().sum().sort_values()))
 
-        return df.values,y.values,list(df.columns)
+        #return df.values,y.values,list(df.columns)
+        return df,y.values
 
     def load_partcsv_without_header(self,filename,
                                     target_dtype,
