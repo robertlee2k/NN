@@ -30,7 +30,7 @@ class TestResult(object):
                           "Accuracy(Test)","NullAccuracy(Test)",
                           "Duration","StartTime","EndTime",
                           "Model Location",
-                          "TFromDate", "TToDate",
+                          "TFromDate", "TToDate","TrainRow#",
                           'ValidationFromD', 'ValidationToD',
                           'TestFromD', 'TestToD']
         self.rows = []
