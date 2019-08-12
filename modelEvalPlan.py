@@ -75,14 +75,14 @@ class ModelEvalPlan(object):
                                                            row['Seqno']))
 
                 tmp = int(row['Seqno'])
-                tmpmin = float(row['MinAUC(Test)'])
+                tmpmin = float(row['MinAUC(Val)'])
                 if tmpmin < 0.0 or tmpmin > 1.0:
-                    raise ValueError("the range of MinAUC(Test) value in seq %s must be [0.0,1.0]" % row['Seqno'])
-                tmpmax = float(row['MaxAUC(Test)'])
+                    raise ValueError("the range of MinAUC(Val) value in seq %s must be [0.0,1.0]" % row['Seqno'])
+                tmpmax = float(row['MaxAUC(Val)'])
                 if tmpmax < 0.0 or tmpmax > 1.0:
-                    raise ValueError("the range of MaxAUC(Test) value in seq %s must be [0.0,1.0]" % row['Seqno'])
+                    raise ValueError("the range of MaxAUC(Val) value in seq %s must be [0.0,1.0]" % row['Seqno'])
                 if tmpmin>tmpmax:
-                    raise ValueError("MinAux(Test) value is larger than MaxAux(Test) in seq %s" % row['Seqno'])
+                    raise ValueError("MinAux(Val) value is larger than MaxAux(Val) in seq %s" % row['Seqno'])
             except ValueError as e:
                 log(e.message)
                 errorFound = True

@@ -5,7 +5,7 @@ this program is a DNN stock models' consumer
 its input: 1. ModelLoadEvalPlan.csv
            2. DNN_training_results.csv
 
-output: 1. DNN_training_results.csv
+output: 1. DNN_eval_results.csv.csv
     appending new test result to above record file
 
 
@@ -13,7 +13,7 @@ it read a model load/evaluate plan by the name of ModelLoadEvalPlan.csv, then lo
 according to DNN_training_results.csv which is produced by model training producer
 it also load test data according to the ModelLoadEvalPlan.csv
 evaluate the trained model over the loaded test data,record their metrics, save the result back to
-DNN_training_result.csv
+DNN_eval_results.csv
 ======================================================================================================
 """
 
@@ -102,14 +102,14 @@ def main():
         #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)
 
         # looking for required model and its accompanied dpp,hyperparam instance
-        log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Test) is between %s and %s"
-            % (seqid, itemDict['TFromDate'],itemDict['TToDate'],itemDict['MinAUC(Test)'],itemDict['MaxAUC(Test)']))
+        log("\n seqid=%d =====> looking for a trained Model fromDate:%s toDate:%s whose AUC(Val) is between %s and %s"
+            % (seqid, itemDict['TFromDate'],itemDict['TToDate'],itemDict['MinAUC(Val)'],itemDict['MaxAUC(Val)']))
         try:
             modelst = ModelStore()
             modelst.getModelFullpath(itemDict['TFromDate'],
                                      itemDict['TToDate'],
-                                     itemDict['MinAUC(Test)'],
-                                     itemDict['MaxAUC(Test)'])
+                                     itemDict['MinAUC(Val)'],
+                                     itemDict['MaxAUC(Val)'])
             if modelst.matchedModelLocations == []:
                 log("Bypass this iteration since no satisfactory trainined model can be found from"
                     " %s" % modelst.testRecordName)
@@ -146,9 +146,9 @@ def main():
                 y_test = test_set.target
 
                 # apply the same feature selection as used for training set to test_set
-                if modelst.featureSel is not None:
-                    log("\n apply feature selector %s to test_set" % modelst.featureSel.__class__.__name__)
-                    X_test = modelst.featureSel.transform(X_test)
+                # if modelst.featureSel is not None:
+                #     log("\n apply feature selector %s to test_set" % modelst.featureSel.__class__.__name__)
+                #     X_test = modelst.featureSel.transform(X_test)
                     # plot transformed test data to review
                 # plotFeatures(X_test,test_set.featurenames,[1],
                 #               itemDict["TestFromD"]+'/'+itemDict["TestToD"],savePlotToDisk=True,scatterAdjust=False)

@@ -255,7 +255,7 @@ class FetchData(object):
             raise ValueError(e)  #capture and throw the exception to the caller
         else:
             df=self._dummy_df(fullDf,self.todummy_list)
-            log("apply dummy_df to change categorical features,after that the feature number is (%d,%d) " %(df.shape[0],df.shape[1]))
+            log("apply dummy_df to change categorical features: %s,after that the feature number is (%d,%d) " %(str(self.todummy_list),df.shape[0],df.shape[1]))
             return Dataset(data=df.values, target=fullTarget, featurenames=list(df.columns))
 
     def loadcsv(self,filename,target_dtype,features_dtype,fromDate,toDate,discard_columns,

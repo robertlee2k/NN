@@ -20,6 +20,7 @@ dppfilename = 'dpp.bin'     # default datapreprocess filename to hold DataPrepro
 hyperparamfilename = 'hyperParam.bin'  # default filename to hold hpDict
 featureSelectorfilename = 'FeatureKBest.bin'
 testResultfile = "DNN_Training_results.csv"  # file to record model training results
+evalResultfile = "DNN_eval_results.csv"     # file to record model evaluation results against test set after loading training model
 
 # batch size of for prediction , prevent runing out of memory when predict a large set of data
 # total needed memory = predictBatchSize * nodeNumbers * 4
@@ -153,7 +154,7 @@ class ModelStore(object):
         self.dirname = None    # the folder name to be used to save the model to disk
         self.matchedModelLocations = None
         self.testRecordName = testResultfile
-        # self.evalRecordName = evalRecordfile
+        self.evalRecordName = evalResultfile
         self.modelfilename = 'trainedModel'
         self.dpp = None
         self.hpDict = None
@@ -259,8 +260,8 @@ class ModelStore(object):
             toDate = datetime.datetime.strptime(row["TToDate"], "%Y/%m/%d")
 
             if start == stDate and end == toDate:  # found a matched training from/to date
-                if float(row['AUC(Test)']) >= float(minAuc) \
-                   and float(row['AUC(Test)']) <= float(maxAuc):
+                if float(row['AUC(Val)']) >= float(minAuc) \
+                   and float(row['AUC(Val)']) <= float(maxAuc):
                     self.matchedModelLocations.append(row['Model Location'])
 
         # remove duplicate
@@ -455,6 +456,8 @@ class ModelStore(object):
                       hpDict['TrainRowNum'],
                       hpDict['ValidationFromD'], hpDict['ValidationToD'],
                       hpDict['TestFromD'], hpDict['TestToD']]
+            trackRecord = TestResult(self.testRecordName)
+            trackRecord.append(result)
         else:
             # update test result  to file according to above column sequence
             # training auc,loss, training accuracy,training null accuracy,
@@ -492,8 +495,8 @@ class ModelStore(object):
                       hpDict['ValidationFromD'], hpDict['ValidationToD'],
                       hpDict['TestFromD'], hpDict['TestToD']]
 
-        trackRecord = TestResult(self.testRecordName)
-        trackRecord.append(result)
+            evalRecord = TestResult(self.evalRecordName)
+            evalRecord.append(result)
 
     def evaluateTestSet(self, X_test,y_test,itemDict):
         '''
